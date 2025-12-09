@@ -1,0 +1,639 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>彈性工時排班表</title>
+  <!-- 載入 Inter 字體 -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+  <!-- 載入 Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- 配置 Tailwind 使用 Inter 字體 -->
+  <style>
+    body {
+      font-family: 'Inter', sans-serif;
+    }
+  </style>
+
+  <!-- 載入 React, Babel, Lucide Icons -->
+  <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://unpkg.com/lucide-react@latest/dist/umd/lucide-react.min.js"></script>
+  
+  <!-- Firebase 模組載入 -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+    import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+    import { getFirestore, doc, addDoc, setDoc, updateDoc, deleteDoc, onSnapshot, collection, query, setLogLevel, arrayUnion, arrayRemove, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+    
+    // 設定 Firebase 變數以便在 Babel/JSX 腳本中使用
+    window.initializeApp = initializeApp;
+    window.getAuth = getAuth;
+    window.signInAnonymously = signInAnonymously;
+    window.onAuthStateChanged = onAuthStateChanged;
+    window.getFirestore = getFirestore;
+    window.doc = doc;
+    window.addDoc = addDoc;
+    window.setDoc = setDoc;
+    window.updateDoc = updateDoc;
+    window.deleteDoc = deleteDoc;
+    window.onSnapshot = onSnapshot;
+    window.collection = collection;
+    window.query = query;
+    window.setLogLevel = setLogLevel;
+    window.arrayUnion = arrayUnion;
+    window.arrayRemove = arrayRemove;
+    window.serverTimestamp = serverTimestamp;
+
+    // 將 Lucide React 的所有導出放在 window.LucideReact 下
+    if (typeof LucideReact !== 'undefined') {
+      window.LucideReact = LucideReact;
+    }
+  </script>
+</head>
+<body class="bg-gray-50 min-h-screen">
+
+<div id="root"></div>
+
+<script type="text/babel">
+  const { useState, useEffect, useCallback, useMemo } = React;
+  const { createRoot } = ReactDOM;
+  const { Calendar, Clock, User, X, Plus, Trash2, Edit } = window.LucideReact || {};
+
+  // --- START: Firebase Configuration (Your Custom Config) ---
+  // 這段程式碼已經被替換為您的專屬 Firebase 配置，用於 GitHub 部署。
+  const YOUR_FIREBASE_CONFIG = {
+    apiKey: "AIzaSyDCEvRaXA6WZsNm9ieWkWbqd5WulYhLHZU",
+    authDomain: "studio-8052896891-3435d.firebaseapp.com",
+    projectId: "studio-8052896891-3435d",
+    storageBucket: "studio-8052896891-3435d.firebasestorage.app",
+    messagingSenderId: "1018029524188",
+    appId: "1:1018029524188:web:f81bd6343ed0f4bbe6a019",
+  };
+  
+  const effectiveFirebaseConfig = YOUR_FIREBASE_CONFIG;
+  // 使用 Project ID 作為 Firestore 路徑中的固定 App ID
+  const appId = 'studio-8052896891-3435d';
+  // --- END: Firebase Configuration ---
+
+  // 定義班次類型
+  const shiftTypes = [
+    { id: 'H', name: '日班', time: '08:00-17:00', color: 'bg-green-100 text-green-700' },
+    { id: 'R', name: '晚班', time: '14:00-23:00', color: 'bg-yellow-100 text-yellow-700' },
+    { id: 'O', name: '夜班', time: '23:00-08:00', color: 'bg-red-100 text-red-700' },
+    { id: 'OFF', name: '休', time: '休息', color: 'bg-gray-300 text-gray-700' },
+  ];
+
+  // 輔助函式：將日期格式化為 YYYY-MM-DD
+  const formatDate = (date) => {
+    const d = new Date(date);
+    let month = '' + (d.getMonth() + 1);
+    let day = '' + d.getDate();
+    const year = d.getFullYear();
+
+    if (month.length < 2) month = '0' + month;
+    if (day.length < 2) day = '0' + day;
+
+    return [year, month, day].join('-');
+  };
+
+  // 輔助函式：取得一個月的第一天
+  const getFirstDayOfMonth = (year, month) => new Date(year, month - 1, 1);
+
+  // 輔助函式：取得一個月的總天數
+  const getDaysInMonth = (year, month) => new Date(year, month, 0).getDate();
+
+  // 輔助函式：取得當月日曆網格
+  const getCalendarDays = (year, month) => {
+    const days = [];
+    const firstDay = getFirstDayOfMonth(year, month);
+    const numDays = getDaysInMonth(year, month);
+    
+    // 填補前一個月的日子
+    const startDayOfWeek = firstDay.getDay() === 0 ? 6 : firstDay.getDay() - 1; // 星期一為 0
+    const prevMonthNumDays = getDaysInMonth(year, month - 1);
+    for (let i = startDayOfWeek - 1; i >= 0; i--) {
+      days.push({ 
+        date: formatDate(new Date(year, month - 2, prevMonthNumDays - i)), 
+        isCurrentMonth: false 
+      });
+    }
+
+    // 填補當月的日子
+    for (let i = 1; i <= numDays; i++) {
+      days.push({ 
+        date: formatDate(new Date(year, month - 1, i)), 
+        isCurrentMonth: true 
+      });
+    }
+
+    // 填補後一個月的日子，直到滿 6 週
+    while (days.length % 7 !== 0 || days.length < 42) {
+      const nextMonthDay = days.length - (startDayOfWeek + numDays) + 1;
+      days.push({ 
+        date: formatDate(new Date(year, month, nextMonthDay)), 
+        isCurrentMonth: false 
+      });
+    }
+
+    return days;
+  };
+
+  // 輔助函式：檢查是否為週日（用於標記）
+  const isSunday = (dateString) => new Date(dateString).getDay() === 0;
+
+  // 輔助函式：判斷是否為四週變形工時結算日 (假設每月 15 號，實際應根據公司規定調整)
+  const isSettlementDay = (dateString) => {
+    const date = new Date(dateString);
+    return date.getDate() === 15; // 簡單假設每月 15 號
+  };
+
+  // 模組：Firebase 服務 (已修正為外部環境穩定版本，強制匿名登入)
+  const useFirebase = () => {
+    const [db, setDb] = useState(null);
+    const [auth, setAuth] = useState(null);
+    const [userId, setUserId] = useState(null);
+    const [isAuthReady, setIsAuthReady] = useState(false);
+
+    useEffect(() => {
+      try {
+        window.setLogLevel('debug');
+        const app = window.initializeApp(effectiveFirebaseConfig);
+        const newAuth = window.getAuth(app);
+        const newDb = window.getFirestore(app);
+
+        setAuth(newAuth);
+        setDb(newDb);
+
+        const unsubscribe = window.onAuthStateChanged(newAuth, async (user) => {
+          if (user) {
+            setUserId(user.uid);
+          } else {
+            // 在外部環境中，我們直接強制匿名登入，不依賴 __initial_auth_token
+            try {
+              await window.signInAnonymously(newAuth);
+            } catch (error) {
+              console.error("Firebase Auth Error: Failed to sign in anonymously.", error);
+            }
+          }
+          setIsAuthReady(true);
+        });
+
+        return () => unsubscribe();
+      } catch (e) {
+        console.error("Firebase Initialization Error:", e);
+      }
+    }, []); 
+
+    return { db, auth, userId, isAuthReady };
+  };
+
+  // 模組：資料庫操作
+  const useShifts = (db, isAuthReady, userId) => {
+    const [shifts, setShifts] = useState({});
+    const [users, setUsers] = useState([]);
+    const [loading, setLoading] = useState(true);
+
+    const shiftsCollectionPath = `artifacts/${appId}/public/data/shifts`;
+    const usersDocPath = `artifacts/${appId}/public/data/users/list`;
+
+    // 取得所有排班資料和用戶列表
+    useEffect(() => {
+      if (!db || !isAuthReady || !userId) return;
+
+      // 1. 監聽排班表
+      const shiftsRef = window.collection(db, shiftsCollectionPath);
+      const unsubscribeShifts = window.onSnapshot(shiftsRef, (snapshot) => {
+        const newShifts = {};
+        snapshot.forEach(doc => {
+          newShifts[doc.id] = doc.data().shifts || {};
+        });
+        setShifts(newShifts);
+        setLoading(false);
+      }, (error) => {
+        console.error("Shift Snapshot Error:", error);
+      });
+
+      // 2. 監聽用戶列表
+      const userRef = window.doc(db, usersDocPath);
+      const unsubscribeUsers = window.onSnapshot(userRef, (docSnap) => {
+        if (docSnap.exists()) {
+          const userData = docSnap.data().users || [];
+          setUsers(userData.map(u => ({ id: u, name: u.substring(0, 8) }))); // 顯示部分 ID 作為名稱
+        } else {
+          setUsers([{ id: userId, name: userId.substring(0, 8) }]);
+          // 初始化用戶列表，將當前用戶加入
+          window.setDoc(userRef, { users: [userId], timestamp: window.serverTimestamp() }, { merge: true }).catch(console.error);
+        }
+      }, (error) => {
+        console.error("User Snapshot Error:", error);
+      });
+
+      return () => {
+        unsubscribeShifts();
+        unsubscribeUsers();
+      };
+    }, [db, isAuthReady, userId]);
+
+    // 加入用戶（如果用戶不在列表中）
+    const addUser = useCallback(async (newUserId) => {
+      if (!db) return;
+      const userRef = window.doc(db, usersDocPath);
+      const userList = users.map(u => u.id);
+      if (!userList.includes(newUserId)) {
+        await window.updateDoc(userRef, { users: window.arrayUnion(newUserId), timestamp: window.serverTimestamp() });
+      }
+    }, [db, users]);
+
+    // 更新排班
+    const updateShift = useCallback(async (shiftUserId, date, shiftId) => {
+      if (!db) return;
+      
+      // 確保當前用戶在用戶列表
+      await addUser(userId);
+
+      const userShiftRef = window.doc(db, shiftsCollectionPath, shiftUserId);
+      const newShiftData = { [date]: shiftId };
+      
+      try {
+        await window.setDoc(userShiftRef, { 
+          shifts: newShiftData,
+          updatedAt: window.serverTimestamp(),
+          userId: shiftUserId
+        }, { merge: true });
+      } catch (e) {
+        console.error("Error updating shift:", e);
+      }
+    }, [db, userId, addUser]);
+
+    // 移除用戶
+    const removeUser = useCallback(async (targetUserId) => {
+      if (!db) return;
+      const userRef = window.doc(db, usersDocPath);
+      await window.updateDoc(userRef, { users: window.arrayRemove(targetUserId), timestamp: window.serverTimestamp() });
+      
+      // 刪除該用戶的排班文檔
+      const userShiftRef = window.doc(db, shiftsCollectionPath, targetUserId);
+      await window.deleteDoc(userShiftRef).catch(e => console.error("Error deleting user shifts:", e));
+      
+    }, [db]);
+    
+    return { shifts, users, loading, updateShift, addUser, removeUser };
+  };
+
+  // 應用程式主元件
+  const App = () => {
+    const { db, userId, isAuthReady } = useFirebase();
+    const { shifts, users, loading, updateShift, addUser, removeUser } = useShifts(db, isAuthReady, userId);
+    
+    const today = new Date();
+    const [currentDate, setCurrentDate] = useState({ 
+      year: today.getFullYear(), 
+      month: today.getMonth() + 1 
+    });
+    const [selectedUser, setSelectedUser] = useState(null); // 用於預排 (pre-schedule)
+    const [showModal, setShowModal] = useState(false);
+    const [newUserModal, setNewUserModal] = useState(false);
+    const [newUserIdInput, setNewUserIdInput] = useState('');
+
+    // 當用戶登入後，自動選擇當前用戶進行預排
+    useEffect(() => {
+      if (userId && !selectedUser) {
+        setSelectedUser(userId);
+      }
+    }, [userId, selectedUser]);
+
+
+    const calendarDays = useMemo(() => getCalendarDays(currentDate.year, currentDate.month), [currentDate]);
+    const dayNames = ['一', '二', '三', '四', '五', '六', '日'];
+
+    const handleMonthChange = (direction) => {
+      let { year, month } = currentDate;
+      if (direction === 'next') {
+        month++;
+        if (month > 12) {
+          month = 1;
+          year++;
+        }
+      } else {
+        month--;
+        if (month < 1) {
+          month = 12;
+          year--;
+        }
+      }
+      setCurrentDate({ year, month });
+    };
+
+    const handleShiftSelect = (date, shiftId) => {
+      if (selectedUser) {
+        updateShift(selectedUser, date, shiftId);
+      } else {
+        // 使用自定義訊息框代替 alert()
+        alert('請先選擇一個用戶進行排班！'); 
+      }
+    };
+
+    const handleAddUser = async () => {
+      if (newUserIdInput && newUserIdInput.length >= 8) {
+        await addUser(newUserIdInput);
+        setNewUserIdInput('');
+        setNewUserModal(false);
+      } else {
+        // 使用自定義訊息框代替 alert()
+        alert('用戶 ID 至少需要 8 個字元。'); 
+      }
+    };
+    
+    // 簡單的自定義 Alert 函數 (用於替代瀏覽器原生的 alert)
+    const CustomAlert = ({ message, onClose }) => (
+      <div className="fixed inset-0 bg-gray-900 bg-opacity-50 flex items-center justify-center z-[60]">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-xs p-6 text-center">
+              <p className="text-gray-800 font-medium mb-4">{message}</p>
+              <button onClick={onClose} className="bg-indigo-500 hover:bg-indigo-600 text-white font-semibold py-2 px-4 rounded-lg transition duration-150 w-full">
+                  確認
+              </button>
+          </div>
+      </div>
+    );
+    const [alertMessage, setAlertMessage] = useState(null);
+    const alert = (message) => setAlertMessage(message);
+
+
+    if (!isAuthReady) {
+      return (
+        <div className="flex items-center justify-center min-h-screen">
+          <p className="text-xl text-gray-600">載入中... (正在進行 Firebase 驗證)</p>
+        </div>
+      );
+    }
+    
+    const currentUserDisplayName = userId ? users.find(u => u.id === userId)?.name || userId.substring(0, 8) : '匿名用戶';
+
+    return (
+      <div className="container mx-auto p-4 max-w-7xl">
+        
+        <header className="flex flex-col md:flex-row justify-between items-center bg-white p-4 rounded-lg shadow-md mb-6 sticky top-0 z-10">
+          <h1 className="text-3xl font-bold text-indigo-700 flex items-center mb-2 md:mb-0">
+            <Calendar className="w-8 h-8 mr-2" />
+            彈性工時排班表
+          </h1>
+          <div className="flex items-center space-x-4">
+            <div className="text-gray-600 text-sm md:text-base flex items-center">
+              <User className="w-5 h-5 mr-1 text-indigo-500" />
+              當前用戶 ID (顯示前 8 碼): <span className="font-mono bg-gray-100 px-2 py-1 rounded-md text-indigo-600 ml-1">{currentUserDisplayName}</span>
+            </div>
+            <button
+              onClick={() => setShowModal(true)}
+              className="bg-indigo-500 hover:bg-indigo-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md transition duration-150 ease-in-out transform hover:scale-[1.02] flex items-center"
+            >
+              <User className="w-5 h-5 mr-2" />
+              管理用戶 & 預排
+            </button>
+          </div>
+        </header>
+
+        {/* 日曆導航 */}
+        <div className="flex justify-between items-center mb-4 bg-white p-4 rounded-lg shadow-md">
+          <button
+            onClick={() => handleMonthChange('prev')}
+            className="text-gray-600 hover:text-indigo-600 p-2 rounded-full transition duration-150"
+          >
+            &lt; 上個月
+          </button>
+          <h2 className="text-2xl font-semibold text-gray-800">
+            {currentDate.year} 年 {currentDate.month} 月
+          </h2>
+          <button
+            onClick={() => handleMonthChange('next')}
+            className="text-gray-600 hover:text-indigo-600 p-2 rounded-full transition duration-150"
+          >
+            下個月 &gt;
+          </button>
+        </div>
+
+        {loading ? (
+          <div className="text-center p-8 text-xl text-gray-500">載入排班資料中...</div>
+        ) : (
+          <div className="overflow-x-auto bg-white rounded-lg shadow-xl p-4">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead>
+                {/* 星期名稱 */}
+                <tr className="bg-indigo-500 text-white text-center text-sm font-semibold tracking-wider">
+                  <th className="py-2 px-1 w-20 sticky left-0 bg-indigo-500 z-10">用戶 / 日期</th>
+                  {calendarDays.slice(0, 7).map((day, index) => (
+                    <th key={index} className="py-2 px-1">
+                      {dayNames[index]}
+                    </th>
+                  ))}
+                  {calendarDays.slice(7).map((day, index) => {
+                    const date = new Date(day.date);
+                    const isToday = day.date === formatDate(today);
+                    return (
+                      <th 
+                        key={index + 7} 
+                        className={`py-2 px-1 whitespace-nowrap border-l border-gray-100 ${isSunday(day.date) ? 'bg-red-50' : 'bg-indigo-500'} ${isToday ? 'bg-yellow-400 text-gray-900' : ''}`}
+                      >
+                        {dayNames[(index + 7) % 7]}
+                      </th>
+                    );
+                  })}
+                </tr>
+
+                {/* 日期數字 */}
+                <tr className="bg-indigo-100 text-gray-700 text-center font-medium">
+                  <td className="py-2 px-1 w-20 sticky left-0 bg-indigo-100 z-10"></td>
+                  {calendarDays.map((day, index) => {
+                    const date = new Date(day.date);
+                    const isToday = day.date === formatDate(today);
+                    const isSettlement = isSettlementDay(day.date);
+                    
+                    let dayClass = day.isCurrentMonth ? '' : 'text-gray-400';
+                    if (isSunday(day.date)) dayClass += ' text-red-600';
+                    if (isToday) dayClass += ' bg-yellow-200 font-bold rounded-md mx-1';
+                    if (isSettlement) dayClass += ' border-t-4 border-yellow-500';
+
+                    return (
+                      <td 
+                        key={index} 
+                        className={`py-2 px-1 border-l border-gray-200 whitespace-nowrap ${dayClass} ${isSettlement ? 'bg-yellow-50' : ''}`}
+                      >
+                        {date.getDate()}
+                      </td>
+                    );
+                  })}
+                </tr>
+              </thead>
+
+              <tbody className="divide-y divide-gray-200">
+                {users.map((user) => (
+                  <tr key={user.id} className="hover:bg-gray-50 transition duration-100">
+                    <td className="py-2 px-1 w-20 sticky left-0 bg-indigo-50 border-r border-gray-200 font-semibold text-gray-800 z-20">
+                      {user.name} 
+                      {user.id === userId && <span className="text-xs text-indigo-500 block">(你)</span>}
+                    </td>
+                    {calendarDays.map((day, index) => {
+                      const dateString = day.date;
+                      const userShiftData = shifts[user.id] || {};
+                      const shiftId = userShiftData[dateString];
+                      const shiftType = shiftTypes.find(s => s.id === shiftId);
+                      const isToday = dateString === formatDate(today);
+                      const isSettlement = isSettlementDay(dateString);
+                      
+                      // 樣式
+                      let cellClass = 'py-2 px-1 text-center font-bold relative border-l border-gray-100 text-sm';
+                      if (!day.isCurrentMonth) cellClass += ' bg-gray-100';
+                      if (isSunday(dateString)) cellClass += ' bg-red-50';
+                      if (isSettlement) cellClass += ' border-t-2 border-yellow-500 bg-yellow-50';
+                      if (isToday) cellClass += ' border-2 border-yellow-500 shadow-inner';
+                      
+                      // 判斷是否為 H/R/O 班次 (紅色字體)
+                      const isWorkShift = shiftId && shiftId !== 'OFF';
+                      const textColorClass = isWorkShift ? 'text-red-600' : 'text-gray-800';
+
+                      return (
+                        <td key={index} className={cellClass}>
+                          <span className={textColorClass}>
+                            {shiftId || '-'}
+                          </span>
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+                
+                {/* 預排 (Pre-schedule) 列 */}
+                <tr className="bg-blue-100 border-t-4 border-blue-400">
+                  <td className="py-2 px-1 w-20 sticky left-0 bg-blue-100 border-r border-blue-400 font-bold text-blue-700 z-20">
+                    預排: {selectedUser ? users.find(u => u.id === selectedUser)?.name : '未選'}
+                  </td>
+                  {calendarDays.map((day, index) => {
+                    const dateString = day.date;
+                    const shiftId = shifts[selectedUser]?.[dateString];
+                    const isSettlement = isSettlementDay(dateString);
+
+                    return (
+                      <td key={index} className={`py-1 px-1 border-l border-gray-200 ${isSettlement ? 'border-t-2 border-yellow-500 bg-yellow-100' : ''}`}>
+                        <div className="flex flex-col space-y-1">
+                          {shiftTypes.map(shift => (
+                            <button
+                              key={shift.id}
+                              onClick={() => handleShiftSelect(dateString, shift.id)}
+                              className={`text-xs px-1 py-0.5 rounded transition duration-100 ${
+                                shiftId === shift.id
+                                  ? 'ring-2 ring-offset-1 ring-blue-500 font-bold'
+                                  : 'hover:opacity-80'
+                              } ${shift.color}`}
+                              disabled={!selectedUser}
+                            >
+                              {shift.id}
+                            </button>
+                          ))}
+                        </div>
+                      </td>
+                    );
+                  })}
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {/* 底部說明與警示 */}
+        <div className="mt-6 p-4 bg-white rounded-lg shadow-md">
+          <h3 className="text-lg font-semibold text-gray-700 mb-2">排班說明</h3>
+          <div className="text-sm text-gray-600 space-y-1">
+            <p>* 班次代碼：H (日班), R (晚班), O (夜班), OFF (休息)。</p>
+            <p>* 標示說明：<span className="text-red-600">紅色字體</span>為 H/R/O (工作班次)，<span className="bg-blue-100 px-1 rounded">淺藍底色</span>為預排。</p>
+            <p>* 週期標示：黃色粗線與底色標示四週變形工時的結算日 (假設每月 15 號，實際應根據公司規定調整)。</p>
+            <p className="mt-2 font-bold text-gray-700">【重要提醒】本版本已使用您的 Firebase 配置。請確保您的 Firestore 安全規則已正確設定，以允許匿名使用者進行讀寫操作。</p>
+          </div>
+        </div>
+        
+        {/* 自定義 Alert Modal */}
+        {alertMessage && <CustomAlert message={alertMessage} onClose={() => setAlertMessage(null)} />}
+
+        {/* 用戶管理 Modal */}
+        {showModal && (
+          <div className="fixed inset-0 bg-gray-900 bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg p-6">
+              <div className="flex justify-between items-center border-b pb-3 mb-4">
+                <h3 className="text-xl font-bold text-indigo-700">用戶管理與預排選擇</h3>
+                <button onClick={() => setShowModal(false)} className="text-gray-400 hover:text-gray-600 p-1 rounded-full transition"><X className="w-6 h-6" /></button>
+              </div>
+
+              <div className="mb-4">
+                <p className="text-sm font-medium text-gray-700 mb-2">選擇預排用戶：</p>
+                <div className="grid grid-cols-2 gap-3 max-h-48 overflow-y-auto pr-2">
+                  {users.map(user => (
+                    <div key={user.id} className="flex items-center justify-between p-3 border rounded-lg transition duration-150">
+                      <button
+                        onClick={() => { setSelectedUser(user.id); setShowModal(false); }}
+                        className={`text-left flex-1 font-mono text-sm truncate ${selectedUser === user.id ? 'text-indigo-600 font-bold' : 'text-gray-700 hover:text-indigo-500'}`}
+                      >
+                        {user.name} {user.id === userId && <span className="text-xs text-indigo-400">(你)</span>}
+                      </button>
+                      <button
+                        onClick={() => removeUser(user.id)}
+                        disabled={user.id === userId}
+                        title={user.id === userId ? '不能移除自己' : '移除用戶'}
+                        className={`ml-2 p-1 rounded-full transition ${user.id === userId ? 'text-gray-300 cursor-not-allowed' : 'text-red-500 hover:bg-red-100'}`}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                <p className="text-xs text-gray-500 mt-2">點擊用戶即可選擇，該用戶的排班會顯示在日曆最下方。</p>
+              </div>
+
+              <div className="border-t pt-4">
+                <button
+                  onClick={() => { setNewUserModal(true); setShowModal(false); }}
+                  className="bg-green-500 hover:bg-green-600 text-white font-semibold py-2 px-4 rounded-lg shadow transition duration-150 flex items-center w-full justify-center"
+                >
+                  <Plus className="w-5 h-5 mr-2" />
+                  新增用戶
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+        
+        {/* 新增用戶 Modal */}
+        {newUserModal && (
+          <div className="fixed inset-0 bg-gray-900 bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm p-6">
+              <div className="flex justify-between items-center border-b pb-3 mb-4">
+                <h3 className="text-xl font-bold text-green-700">新增協作用戶</h3>
+                <button onClick={() => setNewUserModal(false)} className="text-gray-400 hover:text-gray-600 p-1 rounded-full transition"><X className="w-6 h-6" /></button>
+              </div>
+
+              <p className="text-sm text-gray-600 mb-4">請輸入您想邀請的用戶 ID (至少 8 碼)：</p>
+              <input
+                type="text"
+                value={newUserIdInput}
+                onChange={(e) => setNewUserIdInput(e.target.value)}
+                placeholder="用戶 ID..."
+                className="w-full p-2 border border-gray-300 rounded-lg focus:ring-green-500 focus:border-green-500 mb-4"
+              />
+              <div className="flex justify-end space-x-3">
+                <button onClick={() => setNewUserModal(false)} className="bg-gray-200 hover:bg-gray-300 text-gray-800 font-semibold py-2 px-4 rounded-lg transition">取消</button>
+                <button onClick={handleAddUser} disabled={newUserIdInput.length < 8} className="bg-green-500 hover:bg-green-600 text-white font-semibold py-2 px-4 rounded-lg transition disabled:opacity-50">確認新增</button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const container = document.getElementById('root');
+  const root = createRoot(container);
+  root.render(<App />);
+
+</script>
+
+</body>
+</html>
