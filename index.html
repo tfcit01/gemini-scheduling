@@ -599,8 +599,8 @@
 
             return (
                 <div className="min-h-screen bg-gray-50 text-gray-800 font-sans p-4 print:p-0 print:bg-white">
-                    {/* Header */}
-                    <div className="max-w-7xl mx-auto mb-6 flex flex-col md:flex-row justify-between items-center gap-4 bg-white p-4 rounded-lg shadow-sm border border-gray-200 print:hidden">
+                    {/* Header: 改為 w-full 以與表格對齊 */}
+                    <div className="w-full mb-6 flex flex-col md:flex-row justify-between items-center gap-4 bg-white p-4 rounded-lg shadow-sm border border-gray-200 print:hidden">
                         <div>
                             <h1 className="text-2xl font-bold text-blue-800">2026 線上排班系統</h1>
                             <p className="text-sm text-gray-500">四週變形工時 | 自動檢核 | 即時儲存</p>
@@ -654,8 +654,8 @@
                         <h1 className="text-2xl font-bold">2026年 {currentDate.getMonth() + 1}月 輪值班表</h1>
                     </div>
 
-                    {/* Stats Panel */}
-                    <div className="max-w-7xl mx-auto mb-6 grid grid-cols-1 md:grid-cols-4 gap-4 print:hidden">
+                    {/* Stats Panel: 改為 w-full 以與表格對齊 */}
+                    <div className="w-full mb-6 grid grid-cols-1 md:grid-cols-4 gap-4 print:hidden">
                         {staffNames.map((staff, idx) => {
                             const hStats = getHStats(idx);
                             
@@ -703,8 +703,8 @@
                         <table className="w-full min-w-[1200px] border-collapse text-sm print:text-xs">
                             <thead>
                                 <tr>
-                                    {/* 修正：縮小寬度，顯示年/月並斷行 */}
-                                    <th className="sticky left-0 z-20 bg-gray-100 print:bg-white p-2 border-b border-r min-w-[90px] text-center align-middle">
+                                    {/* 修正：縮小寬度 min-w-[80px]，顯示年/月並斷行 */}
+                                    <th className="sticky left-0 z-20 bg-gray-100 print:bg-white p-2 border-b border-r min-w-[80px] text-center align-middle">
                                         <div className="flex flex-col items-center justify-center font-bold text-gray-700">
                                             <span>{currentDate.getFullYear()}年</span>
                                             <span>{currentDate.getMonth() + 1}月</span>
@@ -776,7 +776,7 @@
                                                 ) : (
                                                     <input 
                                                         type="text" 
-                                                        className="w-full h-12 px-2 border-none focus:ring-2 focus:ring-blue-500 bg-transparent text-gray-800 font-bold"
+                                                        className="w-full h-12 px-1 border-none focus:ring-2 focus:ring-blue-500 bg-transparent text-gray-800 font-bold"
                                                         value={staffName}
                                                         onChange={(e) => handleStaffNameChange(staffIdx, e.target.value)}
                                                         placeholder={`同仁 ${String.fromCharCode(65+staffIdx)}`}
