@@ -141,8 +141,8 @@
             }
         }
 
-        // --- 資料設定 (保持不變) ---
-        const DEFAULT_STAFF_MEMBERS = ['同仁 A', '同仁 B', '同仁 C', '同仁 D'];
+        // --- 資料設定 (更新預設名單) ---
+        const DEFAULT_STAFF_MEMBERS = ['蔡定緯', '林家傑', '邱奕瑋', '陶楷頤'];
 
         const SHIFT_OPTIONS = [
             { value: '', label: '-' },
@@ -751,6 +751,13 @@
                                     const isCopySource = copySourceRowIndex === staffIdx;
                                     const isCopyDestination = isCopyMode && copiedRowData && !isCopySource;
 
+                                    // 計算本月晚班負責人 (2026/1月=陶楷頤=Index 3, 2月=Index 0...)
+                                    // 公式: (總月數差 + 3) % 4
+                                    const totalMonths = (currentDate.getFullYear() - 2026) * 12 + currentDate.getMonth();
+                                    let shiftIndex = (totalMonths + 3) % 4;
+                                    if (shiftIndex < 0) shiftIndex += 4; // 處理負數
+                                    const isNightShift = staffIdx === shiftIndex;
+
                                     return (
                                         <tr key={staffIdx} className="hover:bg-gray-50 transition-colors print:hover:bg-transparent">
                                             <td className="sticky left-0 z-10 bg-white p-0 border-r border-b border-gray-300 font-medium text-gray-700 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] print:shadow-none">
@@ -774,13 +781,20 @@
                                                         )}
                                                     </button>
                                                 ) : (
-                                                    <input 
-                                                        type="text" 
-                                                        className="w-full h-12 px-1 border-none focus:ring-2 focus:ring-blue-500 bg-transparent text-gray-800 font-bold"
-                                                        value={staffName}
-                                                        onChange={(e) => handleStaffNameChange(staffIdx, e.target.value)}
-                                                        placeholder={`同仁 ${String.fromCharCode(65+staffIdx)}`}
-                                                    />
+                                                    <div className="w-full h-12 flex items-center justify-center relative">
+                                                        <input 
+                                                            type="text" 
+                                                            className="w-full h-full text-center border-none focus:ring-2 focus:ring-blue-500 bg-transparent text-gray-800 font-bold pr-8"
+                                                            value={staffName}
+                                                            onChange={(e) => handleStaffNameChange(staffIdx, e.target.value)}
+                                                            placeholder={`同仁 ${String.fromCharCode(65+staffIdx)}`}
+                                                        />
+                                                        {isNightShift && (
+                                                            <span className="absolute right-0.5 top-1/2 transform -translate-y-1/2 text-[10px] text-blue-600 bg-blue-50 px-0.5 rounded border border-blue-100 pointer-events-none">
+                                                                (晚班)
+                                                            </span>
+                                                        )}
+                                                    </div>
                                                 )}
                                             </td>
                                             {daysInView.map(dateStr => {
