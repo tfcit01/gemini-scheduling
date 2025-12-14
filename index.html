@@ -28,6 +28,12 @@
             th, td { border: 1px solid #ccc !important; }
             select { -webkit-appearance: none; -moz-appearance: none; text-indent: 1px; text-overflow: ''; border: none; background: transparent; }
         }
+        
+        /* 自定義捲軸樣式 */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #f1f1f1; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
     </style>
 </head>
 <body class="bg-gray-50 text-gray-800 font-sans">
@@ -37,7 +43,9 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, collection, doc, onSnapshot, setDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getFirestore, collection, doc, onSnapshot, setDoc, deleteDoc, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        
+        // setLogLevel('Debug'); // 開啟 Firebase Log
 
         // 將 Firebase 函式掛載到 window 物件
         window.firebaseModules = {
@@ -51,7 +59,7 @@
             doc,
             onSnapshot,
             setDoc,
-            deleteDoc
+            deleteDoc,
         };
         
         console.log("Firebase Modules Loaded");
@@ -62,7 +70,7 @@
     <script type="text/babel">
         const { useState, useEffect, useMemo, Component } = React;
 
-        // --- 修正: 內建 SVG 圖示 (解決 CDN 載入失敗出現 ? 的問題) ---
+        // --- 內建 SVG 圖示 (包含新增的鎖頭與歷史紀錄圖示) ---
         const Icons = {
             ChevronLeft: ({size=18, className}) => (
                 <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="m15 18-6-6 6-6"/></svg>
@@ -77,7 +85,7 @@
                 <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
             ),
             ClipboardPaste: ({size=18, className}) => (
-                <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M16 4h2a2 0 0 1 2 2v14a2 0 0 1-2 2H6a2 0 0 1-2-2V6a2 0 0 1 2-2h2"/><rect width="8" height="4" x="8" y="2" rx="1" ry="1"/></svg>
+                <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M16 4h2a2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect width="8" height="4" x="8" y="2" rx="1" ry="1"/></svg>
             ),
             CheckCircle2: ({size=18, className}) => (
                 <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>
@@ -90,25 +98,44 @@
             ),
             Calendar: ({size=18, className}) => (
                 <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg>
+            ),
+            // 新增: 鎖頭圖示
+            Lock: ({size=18, className}) => (
+                <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            ),
+            // 新增: 歷史紀錄圖示
+            History: ({size=18, className}) => (
+                <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
             )
         };
 
+        // 安全渲染圖示 (直接從 Icons 物件取得)
+        const Icon = ({ name, size = 18, className }) => {
+            const SvgIcon = Icons[name];
+            if (!SvgIcon) return <span className="text-red-500 font-bold" title={name}>?</span>;
+            return <SvgIcon size={size} className={className} />;
+        };
+
         // --- Firebase 設定 (您的設定) ---
-        const YOUR_FIREBASE_CONFIG = {
-            apiKey: "AIzaSyDmmqHke3P27opSF9jBdlSj9pKEEvdwr2c",
-            authDomain: "schedule-40963.firebaseapp.com",
-            projectId: "schedule-40963",
-            storageBucket: "schedule-40963.firebasestorage.app",
-            messagingSenderId: "791945121532",
-            appId: "1:791945121532:web:505d17de838c068061d179",
-            measurementId: "G-X9KFCZJEP0"
+        // 請確保您的環境中有 __app_id, __firebase_config, __initial_auth_token
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'schedule-40963';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
+             // 替換為您自己的配置
+             apiKey: "AIzaSyDmmqHke3P27opSF9jBdlSj9pKEEvdwr2c",
+             authDomain: "schedule-40963.firebaseapp.com",
+             projectId: "schedule-40963",
+             storageBucket: "schedule-40963.firebasestorage.app",
+             messagingSenderId: "791945121532",
+             appId: "1:791945121532:web:505d17de838c068061d179",
+             measurementId: "G-X9KFCZJEP0"
         };
 
         // 使用 Project ID 作為路徑 ID
-        const APP_ID = "schedule-40963";
+        const APP_ID = appId;
 
         // --- 錯誤邊界元件 (防止白畫面) ---
         class ErrorBoundary extends Component {
+            // ... (保持不變) ...
             constructor(props) {
                 super(props);
                 this.state = { hasError: false, error: null, errorInfo: null };
@@ -141,7 +168,7 @@
             }
         }
 
-        // --- 資料設定 (更新預設名單) ---
+        // --- 資料設定 ---
         const DEFAULT_STAFF_MEMBERS = ['蔡定緯', '林家傑', '邱奕瑋', '陶楷頤'];
 
         const SHIFT_OPTIONS = [
@@ -154,7 +181,7 @@
             { value: 'R', label: 'R (休息)' },
             { value: 'O', label: 'O (例假)' },
         ];
-
+        
         // 2026 年國定假日 (只包含需要列入 H 假計算的日期)
         const HOLIDAYS_2026 = [
             { date: '2026-01-01', name: '元旦' },
@@ -207,11 +234,16 @@
             return `${year}-${month}-${day}`;
         };
 
-        /**
-         * 取得從 1 月 1 日到指定日期的所有日期字串
-         * @param {string} endDateStr 格式 YYYY-MM-DD
-         * @returns {string[]} 日期字串陣列
-         */
+        const formatDateTime = (isoString) => {
+            if (!isoString) return '無紀錄';
+            try {
+                const date = new Date(isoString);
+                return `${date.getMonth() + 1}/${date.getDate()} ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+            } catch {
+                return '時間格式錯誤';
+            }
+        };
+
         const getDatesFromYearStart = (endDateStr) => {
             const dates = [];
             const year = new Date(endDateStr).getFullYear();
@@ -236,6 +268,12 @@
             const [isTentativeMode, setIsTentativeMode] = useState(false);
             const [loading, setLoading] = useState(true);
             const [loadingError, setLoadingError] = useState(null);
+            
+            // --- 新增的狀態 ---
+            const [currentUserIndex, setCurrentUserIndex] = useState(0); // 用於鎖定模式下識別自己
+            const [isLockedMode, setIsLockedMode] = useState(false); // 編輯鎖定開關
+            const [currentUserId, setCurrentUserId] = useState('');
+            // ---
 
             // Copy/Paste States
             const [isCopyMode, setIsCopyMode] = useState(false);
@@ -248,7 +286,6 @@
             useEffect(() => {
                 const init = async () => {
                     try {
-                        // 等待 window.firebaseModules 載入
                         let attempts = 0;
                         while (!window.firebaseModules && attempts < 20) {
                             await new Promise(resolve => setTimeout(resolve, 100));
@@ -262,19 +299,28 @@
                         const { initializeApp, getAuth, signInAnonymously, onAuthStateChanged, getFirestore } = window.firebaseModules;
                         
                         console.log("Initializing Firebase...");
-                        const app = initializeApp(YOUR_FIREBASE_CONFIG);
+                        const app = initializeApp(firebaseConfig);
                         const auth = getAuth(app);
                         const db = getFirestore(app);
                         
                         setFb({ auth, db });
 
-                        // 登入邏輯
-                        await signInAnonymously(auth);
+                        // 使用初始驗證 Token 或匿名登入
+                        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+                        
+                        if (initialAuthToken) {
+                            await auth.signInWithCustomToken(auth, initialAuthToken);
+                        } else {
+                            await signInAnonymously(auth);
+                        }
                         
                         onAuthStateChanged(auth, (u) => {
-                            console.log("Auth State Changed:", u ? "Logged In" : "Logged Out");
+                            console.log("Auth State Changed:", u ? `Logged In as ${u.uid}` : "Logged Out");
                             setUser(u);
-                            if(u) setLoading(false);
+                            if(u) {
+                                setCurrentUserId(u.uid); // 儲存當前使用者 ID
+                                setLoading(false);
+                            }
                         });
 
                     } catch (error) {
@@ -335,6 +381,19 @@
                     alert("尚未連線到資料庫，無法儲存");
                     return;
                 }
+                
+                // --- 新增: 鎖定模式檢查 ---
+                if (isLockedMode && staffIndex !== currentUserIndex) {
+                    const confirmMessage = `鎖定模式已開啟，您目前身份是「${staffNames[currentUserIndex]}」，無法編輯「${staffNames[staffIndex]}」的班表。`;
+                    console.warn(confirmMessage);
+                    // 使用 custom modal UI 取代 alert()
+                    const modal = document.getElementById('custom-alert-modal');
+                    document.getElementById('custom-alert-message').textContent = confirmMessage;
+                    modal.classList.remove('hidden');
+                    return;
+                }
+                // ---
+
                 const { doc, setDoc, deleteDoc } = window.firebaseModules;
 
                 const docId = `${dateStr}_${staffIndex}`;
@@ -353,7 +412,10 @@
                     }
                 } catch (e) {
                     console.error("Save failed:", e);
-                    alert("儲存失敗: " + e.message);
+                    // 使用 custom modal UI 取代 alert()
+                    const modal = document.getElementById('custom-alert-modal');
+                    document.getElementById('custom-alert-message').textContent = "儲存失敗: " + e.message;
+                    modal.classList.remove('hidden');
                 }
             };
 
@@ -416,6 +478,17 @@
 
             const handleRowClick = async (staffIndex) => {
                 if (!isCopyMode) return;
+                
+                // --- 新增: 鎖定模式檢查 ---
+                if (isLockedMode && copySourceRowIndex === null && staffIndex !== currentUserIndex) {
+                    const confirmMessage = `鎖定模式已開啟，您目前身份是「${staffNames[currentUserIndex]}」，無法貼上到「${staffNames[staffIndex]}」的班表。`;
+                    console.warn(confirmMessage);
+                    const modal = document.getElementById('custom-alert-modal');
+                    document.getElementById('custom-alert-message').textContent = confirmMessage;
+                    modal.classList.remove('hidden');
+                    return;
+                }
+                // ---
 
                 if (copiedShiftValue) {
                     setCopiedShiftValue(null);
@@ -537,20 +610,11 @@
                 return { rCount, oCount };
             };
 
-            // 修正後的 getHStats 函式：從年初累計到當前月份的最後一天
             const getHStats = (staffIndex) => {
-                // 1. 找到當前月份的最後一天日期字串
                 const currentMonthEnd = daysInView[daysInView.length - 1];
-                
-                // 2. 取得從 1/1 到當前月份最後一天為止的所有日期
                 const datesToCheck = getDatesFromYearStart(currentMonthEnd);
+                const available = HOLIDAYS_2026.filter(h => datesToCheck.includes(h.date)).length;
 
-                // 3. 計算累計國定假日總數 (Available)
-                const available = HOLIDAYS_2026.filter(h => {
-                    return datesToCheck.includes(h.date);
-                }).length;
-
-                // 4. 計算累計已使用 H 假天數 (Used)
                 let used = 0;
                 datesToCheck.forEach(dateStr => {
                     const key = `${dateStr}_${staffIndex}`;
@@ -566,7 +630,29 @@
                 };
             };
             
+            // --- Custom Alert Modal Component ---
+            const CustomAlert = () => {
+                const closeModal = () => {
+                    document.getElementById('custom-alert-modal').classList.add('hidden');
+                };
+                return (
+                    <div id="custom-alert-modal" className="fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center z-50 hidden print:hidden">
+                        <div className="bg-white p-6 rounded-xl shadow-2xl max-w-sm w-full border-t-4 border-blue-500">
+                            <h3 className="text-xl font-bold text-blue-800 mb-3 flex items-center gap-2"><Icon name="Info" size={24} className="text-blue-500"/> 系統提示</h3>
+                            <p id="custom-alert-message" className="text-gray-700 mb-6"></p>
+                            <button 
+                                onClick={closeModal} 
+                                className="w-full bg-blue-600 text-white py-2 rounded-lg font-medium hover:bg-blue-700 transition"
+                            >
+                                確認
+                            </button>
+                        </div>
+                    </div>
+                );
+            }
+
             if (loadingError) {
+                // ... (Loading Error UI) ...
                 return (
                     <div className="flex items-center justify-center min-h-screen bg-red-50">
                         <div className="bg-white p-6 rounded shadow-lg border border-red-200">
@@ -579,6 +665,7 @@
             }
 
             if (loading) {
+                // ... (Loading UI) ...
                 return (
                     <div className="flex items-center justify-center min-h-screen">
                         <div className="text-center">
@@ -589,22 +676,24 @@
                 );
             }
 
-            // 安全渲染圖示 (直接從 Icons 物件取得)
-            const Icon = ({ name, size = 18, className }) => {
-                const SvgIcon = Icons[name];
-                if (!SvgIcon) return <span className="text-red-500 font-bold" title={name}>?</span>;
-                return <SvgIcon size={size} className={className} />;
-            };
-
+            // 格式化使用者 ID，只取前 6 碼
+            const displayUserId = currentUserId ? `${currentUserId.substring(0, 6)}...` : 'N/A';
+            
             return (
                 <div className="min-h-screen bg-gray-50 text-gray-800 font-sans p-4 print:p-0 print:bg-white">
-                    {/* Header: 改為 w-full 以與表格對齊 */}
+                    <CustomAlert /> {/* 插入 Custom Alert Modal */}
+                    
+                    {/* Header: 包含新的鎖定模式控制項 */}
                     <div className="w-full mb-6 flex flex-col md:flex-row justify-between items-center gap-4 bg-white p-4 rounded-lg shadow-sm border border-gray-200 print:hidden">
-                        <div>
+                        
+                        {/* 左側資訊 */}
+                        <div className="flex flex-col items-center md:items-start">
                             <h1 className="text-2xl font-bold text-blue-800">2026 線上排班系統</h1>
                             <p className="text-sm text-gray-500">四週變形工時 | 自動檢核 | 即時儲存</p>
+                            <div className="text-xs text-gray-400 mt-1">您的 ID: <span className="font-mono text-gray-600">{displayUserId}</span> (用於追溯修改紀錄)</div>
                         </div>
 
+                        {/* 中央月份選擇 */}
                         <div className="flex items-center bg-gray-100 rounded-lg p-1">
                             <button onClick={() => changeMonth(-1)} className="p-2 hover:bg-white rounded-md transition"><Icon name="ChevronLeft" size={20} /></button>
                             <span className="px-4 font-semibold text-lg w-36 text-center">
@@ -612,39 +701,66 @@
                             </span>
                             <button onClick={() => changeMonth(1)} className="p-2 hover:bg-white rounded-md transition"><Icon name="ChevronRight" size={20} /></button>
                         </div>
-                        
-                        <div className="flex items-center gap-4">
-                            
-                            <button 
-                                onClick={toggleCopyMode} 
-                                className={`flex items-center gap-2 px-4 py-2 rounded transition shadow-sm font-medium text-sm border
-                                    ${isCopyMode 
-                                        ? 'bg-green-600 text-white hover:bg-green-700 border-green-600' 
-                                        : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
-                                    }`}
-                                title={isCopyMode ? '點擊退出複製模式' : '啟用後可點擊儲存格複製，或點擊同仁姓名複製整列'}
-                            >
-                                {copiedShiftValue || copiedRowData ? <Icon name="ClipboardPaste" size={18} /> : <Icon name="Copy" size={18} />}
-                                {isCopyMode 
-                                    ? (copiedShiftValue 
-                                        ? `貼上 (${copiedShiftValue})` 
-                                        : (copiedRowData ? '貼上整列' : '請選擇複製來源'))
-                                    : '啟用快速複製'}
-                            </button>
-                            
-                            <label className={`flex items-center gap-2 px-3 py-2 rounded cursor-pointer transition select-none border ${isTentativeMode ? 'bg-blue-100 text-blue-700 border-blue-300 shadow-inner' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`}>
-                                <input 
-                                    type="checkbox" 
-                                    checked={isTentativeMode} 
-                                    onChange={(e) => setIsTentativeMode(e.target.checked)} 
-                                    className="w-4 h-4 text-blue-600"
-                                />
-                                <span className="text-sm font-medium">預排模式 (淺藍)</span>
-                            </label>
-                            
-                            <button onClick={handlePrint} className="flex items-center gap-2 px-4 py-2 bg-slate-800 text-white rounded hover:bg-slate-700 transition shadow-sm">
-                                <Icon name="FileDown" size={18} /> 輸出 PDF / 列印
-                            </button>
+
+                        {/* 右側控制項 */}
+                        <div className="flex flex-wrap items-center gap-2">
+                            {/* 1. 鎖定模式控制 */}
+                            <div className="flex items-center bg-gray-100 p-2 rounded-lg gap-2 text-sm border border-gray-200">
+                                <label className="font-medium text-gray-700">我的身份:</label>
+                                <select 
+                                    value={currentUserIndex} 
+                                    onChange={(e) => setCurrentUserIndex(parseInt(e.target.value))} 
+                                    className="bg-white border border-gray-300 rounded px-2 py-1 text-gray-700"
+                                >
+                                    {staffNames.map((name, index) => (
+                                        <option key={index} value={index}>{name}</option>
+                                    ))}
+                                </select>
+                                <label className={`flex items-center gap-1 cursor-pointer transition select-none px-2 py-1 rounded border ${isLockedMode ? 'bg-red-100 text-red-700 border-red-300 shadow-inner' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`}>
+                                    <input 
+                                        type="checkbox" 
+                                        checked={isLockedMode} 
+                                        onChange={(e) => setIsLockedMode(e.target.checked)} 
+                                        className="w-4 h-4 text-red-600 rounded"
+                                    />
+                                    <Icon name="Lock" size={16} className="shrink-0"/>
+                                    <span className="font-medium whitespace-nowrap">鎖定編輯</span>
+                                </label>
+                            </div>
+
+                            {/* 2. 預排/複製/列印 */}
+                            <div className="flex items-center gap-2">
+                                <label className={`flex items-center gap-2 px-3 py-2 rounded cursor-pointer transition select-none border ${isTentativeMode ? 'bg-blue-100 text-blue-700 border-blue-300 shadow-inner' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`}>
+                                    <input 
+                                        type="checkbox" 
+                                        checked={isTentativeMode} 
+                                        onChange={(e) => setIsTentativeMode(e.target.checked)} 
+                                        className="w-4 h-4 text-blue-600"
+                                    />
+                                    <span className="text-sm font-medium whitespace-nowrap">預排 (淺藍)</span>
+                                </label>
+                                
+                                <button 
+                                    onClick={toggleCopyMode} 
+                                    className={`flex items-center gap-2 px-4 py-2 rounded transition shadow-sm font-medium text-sm border
+                                        ${isCopyMode 
+                                            ? 'bg-green-600 text-white hover:bg-green-700 border-green-600' 
+                                            : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                                        }`}
+                                    title={isCopyMode ? '點擊退出複製模式' : '啟用後可點擊儲存格複製，或點擊同仁姓名複製整列'}
+                                >
+                                    {copiedShiftValue || copiedRowData ? <Icon name="ClipboardPaste" size={18} /> : <Icon name="Copy" size={18} />}
+                                    {isCopyMode 
+                                        ? (copiedShiftValue 
+                                            ? `貼上 (${copiedShiftValue})` 
+                                            : (copiedRowData ? '貼上整列' : '啟用複製'))
+                                        : '快速複製'}
+                                </button>
+                                
+                                <button onClick={handlePrint} className="flex items-center gap-2 px-4 py-2 bg-slate-800 text-white rounded hover:bg-slate-700 transition shadow-sm">
+                                    <Icon name="FileDown" size={18} /> 列印
+                                </button>
+                            </div>
                         </div>
                     </div>
 
@@ -653,7 +769,7 @@
                         <h1 className="text-2xl font-bold">2026年 {currentDate.getFullYear()}年 {currentDate.getMonth() + 1}月 輪值班表</h1>
                     </div>
 
-                    {/* Stats Panel: 改為 w-full 以與表格對齊 */}
+                    {/* Stats Panel */}
                     <div className="w-full mb-6 grid grid-cols-1 md:grid-cols-4 gap-4 print:hidden">
                         {staffNames.map((staff, idx) => {
                             const hStats = getHStats(idx);
@@ -661,10 +777,10 @@
                             return (
                                 <div key={idx} className="bg-white p-3 rounded shadow-sm border-t-4 border-blue-500 text-sm">
                                     <div className="font-bold text-gray-700 text-lg mb-1">{staff || `同仁 ${String.fromCharCode(65+idx)}`}</div>
+                                    {/* ... Stats Content ... */}
                                     <div className="grid grid-cols-2 gap-2">
                                         <div className="bg-red-50 p-2 rounded">
                                             <span className="block text-xs text-gray-500">國定假 (H)</span>
-                                            {/* 修正 H 假顯示邏輯，現在是從年初累計 */}
                                             <div className={`font-mono font-bold ${hStats.remaining >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                                                 餘 {hStats.remaining} <span className="text-[10px] text-gray-400">/ {hStats.available} (累計)</span>
                                             </div>
@@ -701,7 +817,6 @@
                         <table className="w-full min-w-[1200px] border-collapse text-sm print:text-xs">
                             <thead>
                                 <tr>
-                                    {/* 修正：縮小寬度 min-w-[80px]，顯示年/月並斷行 */}
                                     <th className="sticky left-0 z-20 bg-gray-100 print:bg-white p-2 border-b border-r min-w-[80px] text-center align-middle">
                                         <div className="flex flex-col items-center justify-center font-bold text-gray-700">
                                             <span>{currentDate.getFullYear()}年</span>
@@ -748,9 +863,9 @@
                                 {staffNames.map((staffName, staffIdx) => {
                                     const isCopySource = copySourceRowIndex === staffIdx;
                                     const isCopyDestination = isCopyMode && copiedRowData && !isCopySource;
-
-                                    // 計算本月晚班負責人 (2026/1月=陶楷頤=Index 3, 2月=Index 0...)
-                                    // 公式: (總月數差 + 3) % 4
+                                    const isEditable = !isLockedMode || staffIdx === currentUserIndex;
+                                    
+                                    // 計算本月晚班負責人
                                     const totalMonths = (currentDate.getFullYear() - 2026) * 12 + currentDate.getMonth();
                                     let shiftIndex = (totalMonths + 3) % 4;
                                     if (shiftIndex < 0) shiftIndex += 4; // 處理負數
@@ -764,9 +879,11 @@
                                                         className={`w-full h-12 px-2 text-base font-bold transition-all duration-200 flex items-center justify-center
                                                             ${isCopySource ? 'bg-green-100 text-green-700 ring-inset ring-2 ring-green-500' : ''}
                                                             ${isCopyDestination ? 'bg-blue-50 text-blue-600 hover:bg-blue-100 ring-inset ring-2 ring-blue-300' : 'hover:bg-gray-100'}
+                                                            ${!isEditable && !isCopySource && 'opacity-50 cursor-not-allowed'}
                                                         `}
                                                         onClick={() => handleRowClick(staffIdx)}
-                                                        title={isCopySource ? '取消選取' : (copiedRowData ? '點擊貼上整列資料' : '點擊複製整列資料')}
+                                                        title={isCopySource ? '取消選取' : (copiedRowData ? (isEditable ? '點擊貼上整列資料' : '鎖定中，無法貼上') : '點擊複製整列資料')}
+                                                        disabled={isLockedMode && copiedRowData && staffIdx !== currentUserIndex}
                                                     >
                                                         {isCopySource ? (
                                                             <span className="flex items-center gap-1"><Icon name="CheckCircle2" size={14}/> 已複製</span>
@@ -782,7 +899,6 @@
                                                     <div className="w-full h-12 flex items-center justify-center relative">
                                                         <input 
                                                             type="text" 
-                                                            // 修正: 放大字體 (text-lg)
                                                             className="w-full h-full text-center border-none focus:ring-2 focus:ring-blue-500 bg-transparent text-gray-800 text-lg font-bold pr-8"
                                                             value={staffName}
                                                             onChange={(e) => handleStaffNameChange(staffIdx, e.target.value)}
@@ -790,7 +906,6 @@
                                                         />
                                                         {isNightShift && (
                                                             <span className="absolute right-0.5 top-1/2 transform -translate-y-1/2 text-[10px] text-blue-600 bg-blue-50 px-0.5 rounded border border-blue-100 pointer-events-none">
-                                                                {/* 修正: 移除括號 */}
                                                                 晚班
                                                             </span>
                                                         )}
@@ -806,17 +921,22 @@
                                                 const isCycleEnd = getCycleForDate(dateStr)?.end === dateStr;
                                                 const seqError = checkSequenceError(dateStr, staffIdx, shift.value);
                                                 const isSpecialColor = ['H', 'R', 'O'].includes(shift.value);
+                                                
+                                                // 判斷是否禁用編輯 (鎖定模式 + 非自己的行)
+                                                const isCellDisabled = isCopyMode || !isEditable;
 
                                                 return (
                                                     <td 
                                                         key={dateStr} 
-                                                        className={`p-0 border-b border-gray-300 border-r relative transition-all duration-100 ease-in-out
+                                                        className={`p-0 border-b border-gray-300 border-r relative transition-all duration-100 ease-in-out group 
                                                             ${isCycleEnd ? 'border-r-yellow-400 border-r-2' : ''}
                                                             ${isCellCopySource ? 'ring-2 ring-green-500 ring-inset z-30' : ''}
                                                             ${isCellCopyDestination ? 'cursor-copy hover:bg-green-50' : (isCopyMode && !copiedRowData ? 'cursor-pointer hover:bg-gray-100' : '')}
                                                             ${isCopyDestination ? 'bg-blue-50' : ''} 
+                                                            ${!isEditable && !isCopyMode ? 'opacity-60 cursor-not-allowed' : ''}
                                                         `}
                                                         onClick={() => handleCellClick(dateStr, staffIdx)}
+                                                        title={!isEditable && !isCopyMode ? '鎖定模式已開啟，無法編輯' : ''}
                                                     >
                                                         <div className={`
                                                             relative w-full h-12 flex items-center justify-center
@@ -827,12 +947,12 @@
                                                                 className={`
                                                                     w-full h-full text-center bg-transparent appearance-none focus:outline-none focus:bg-white font-medium
                                                                     ${isSpecialColor ? 'text-red-600 font-bold' : 'text-gray-800'}
-                                                                    ${isCopyMode ? 'pointer-events-none' : 'cursor-pointer'}
+                                                                    ${isCellDisabled ? 'pointer-events-none' : 'cursor-pointer'}
                                                                     print:appearance-none print:bg-transparent
                                                                 `}
                                                                 value={shift.value}
                                                                 onChange={(e) => handleShiftChange(dateStr, staffIdx, e.target.value)}
-                                                                disabled={isCopyMode}
+                                                                disabled={isCellDisabled}
                                                             >
                                                                 {SHIFT_OPTIONS.map(opt => (
                                                                     <option key={opt.value} value={opt.value}>{opt.value || ''}</option>
@@ -842,6 +962,24 @@
                                                             {isCellCopyDestination && (
                                                                 <div className="absolute inset-0 flex items-center justify-center opacity-50 pointer-events-none">
                                                                     <Icon name="ClipboardPaste" size={18} className="text-green-500" />
+                                                                </div>
+                                                            )}
+                                                            
+                                                            {/* 稽核資訊 (Audit Tooltip) */}
+                                                            {shift.updatedBy && (
+                                                                <div className="absolute -top-1 right-0 print:hidden">
+                                                                    <Icon name="History" size={10} className="text-gray-400 group-hover:text-blue-500" />
+                                                                    <div className="hidden group-hover:block absolute top-4 right-0 z-50 bg-slate-800 text-white text-xs p-2 rounded shadow-lg w-48 text-left whitespace-nowrap">
+                                                                        <span className="font-bold mb-1 block border-b border-slate-700">最近修改紀錄:</span>
+                                                                        <div className="flex justify-between">
+                                                                            <span>修改者 ID:</span>
+                                                                            <span className="font-mono">{shift.updatedBy.substring(0, 6)}...</span>
+                                                                        </div>
+                                                                        <div className="flex justify-between">
+                                                                            <span>修改時間:</span>
+                                                                            <span>{formatDateTime(shift.updatedAt)}</span>
+                                                                        </div>
+                                                                    </div>
                                                                 </div>
                                                             )}
                                                             
