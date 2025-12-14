@@ -14,9 +14,9 @@
     
     <!-- 載入 Babel -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-
-    <!-- 載入 Lucide React 圖示庫 (保持在 Babel 之後，以符合您原始的配置) -->
-    <script src="https://unpkg.com/lucide-react@latest/dist/umd/lucide-react.min.js"></script>
+    
+    <!-- 載入 Lucide React 圖示庫 - 已修復版本：鎖定到穩定版本 (0.288.0) 以避免 forwardRef 錯誤 -->
+    <script src="https://unpkg.com/lucide-react@0.288.0/dist/umd/lucide-react.min.js"></script>
 
     <!-- 載入並公開 Firebase V9 模組 -->
     <script type="module">
@@ -44,7 +44,7 @@
             .print\:text-xs { font-size: 10px !important; }
             .print\:bg-gray-100 { background-color: #f3f4f6 !important; }
             .print\:border-gray-300 { border-color: #d1d5db !important; }
-            .print-cycle-end { border-right-color: #facc15 !important; border-right-width: 2px !important; }
+            .print-cycle-end { border-right-color: #facc1b !important; border-right-width: 2px !important; }
         }
         /* 確保 body 具有最小高度 */
         #root {
@@ -83,7 +83,7 @@
     </div>
 
     <script type="text/babel">
-        // 確保可以存取 Lucide React 圖示，如果 window.lucide 不存在，則使用空物件避免錯誤
+        // 確保可以存取 Lucide React 圖示
         const lucide = window.lucide || {};
         const { Settings, User, LogOut, Loader, Lock, Unlock, CheckCircle, AlertTriangle } = lucide;
 
@@ -165,7 +165,7 @@
             const auditData = {};
             const shiftCodes = SHIFTS.map(s => s.code);
             
-            // 班別有效性檢查 (B06 隔天不能排 A07)
+            // 班別有效性檢查 (B06 隔天僅能排 A07) - 原始檔案規則
             scheduleData.forEach(user => {
                 auditData[user.id] = {};
                 dateList.forEach((day, index) => {
@@ -175,12 +175,14 @@
                         isRuleValid: true // 班別規則有效性 (B06 -> A07)
                     };
 
-                    // *** 修正後的規則檢查邏輯：B06 隔天不能排 A07 ***
+                    // *** 原始版本規則檢查邏輯：B06 隔天僅能排 A07 ***
+                    // 檢查當天是否為 B06
                     if (currentShift === 'B06' && index < dateList.length - 1) {
                         const nextDayStr = dateList[index + 1].dateStr;
                         const nextShift = user.schedule?.[nextDayStr] || '-';
-                        if (nextShift === 'A07') {
-                            auditData[user.id][day.dateStr].isRuleValid = false; // B06 本身違規
+                        // 如果 B06 隔天不是 A07 且不是未排班/休假，則視為違規
+                        if (nextShift !== 'A07' && !['-', 'H', 'R', 'O'].includes(nextShift)) {
+                            auditData[user.id][day.dateStr].isRuleValid = false; 
                         }
                     }
                 });
@@ -404,7 +406,7 @@
                         const userDoc = await transaction.get(userDocRef);
                         const currentSchedule = userDoc.exists() ? userDoc.data().schedule : {};
 
-                        // 判斷是否為「取消」操作 (點擊相同班別或設為 '-')
+                        // 判斷是否為「取消」操作 (點擊相同班別)
                         const isCurrentShift = newShift === targetUserSchedule.schedule?.[dateStr];
                         
                         let shiftToSet;
@@ -492,7 +494,8 @@
                             ${isValid === false ? 'bg-red-100/70 border border-red-500' : ''}
                         `}
                         disabled={isSaving || !isEditable}
-                        title={shift?.name || '班別'}
+                        // 移除 title 屬性，避免浮動提示干擾輸入
+                        // title={shift?.name || '班別'} 
                     >
                         {display}
                     </button>
@@ -607,7 +610,6 @@
                                                 const shiftCode = user.schedule?.[dateStr] || '-';
                                                 const isCycleEnd = day.isCycleEnd;
                                                 const audit = shiftAudit[user.id]?.[dateStr];
-                                                // 檢查 B06 -> A07 規則
                                                 const isValid = audit ? audit.isRuleValid : true;
 
                                                 return (
@@ -707,7 +709,7 @@
                         <ul className="list-disc list-inside space-y-2">
                             <li><span className="font-semibold">班別規則：</span>
                                 <ul className="list-circle list-inside ml-4">
-                                    <li><span className="font-bold">B06</span> 隔天 <span className="text-red-600 font-bold">不能</span> 排 <span className="font-bold">A07</span> (將被標記 <span className="bg-red-100/70 px-1 rounded">淺紅底色</span>)。</li>
+                                    <li><span className="font-bold">B06</span> 隔天 <span className="text-red-600 font-bold">僅能</span> 排 <span className="font-bold">A07</span> (排其他班將被標記 <span className="bg-red-100/70 px-1 rounded">淺紅底色</span>)。</li>
                                 </ul>
                             </li>
                             <li><span className="font-semibold">人力規則：</span>
