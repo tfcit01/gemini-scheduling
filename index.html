@@ -698,16 +698,16 @@
                     </div>
 
                     {/* Main Grid */}
-                    <div className="max-w-7xl overflow-x-auto mx-auto bg-white shadow rounded-lg border border-gray-200 print:shadow-none print:border-none print:overflow-visible">
+                    {/* 修正：移除 max-w-7xl 與 mx-auto，使用 w-full 盡量填滿寬度 */}
+                    <div className="w-full overflow-x-auto bg-white shadow rounded-lg border border-gray-200 print:shadow-none print:border-none print:overflow-visible">
                         <table className="w-full min-w-[1200px] border-collapse text-sm print:text-xs">
                             <thead>
                                 <tr>
-                                    <th className="sticky left-0 z-20 bg-gray-100 print:bg-white p-2 border-b border-r min-w-[120px] text-left">
-                                        <div className="flex flex-col">
-                                            <span>日期</span>
-                                            <span className="text-[10px] text-gray-400 font-normal">
-                                                {daysInView[0]} ~ {daysInView[daysInView.length-1]}
-                                            </span>
+                                    {/* 修正：縮小寬度，顯示年/月並斷行 */}
+                                    <th className="sticky left-0 z-20 bg-gray-100 print:bg-white p-2 border-b border-r min-w-[90px] text-center align-middle">
+                                        <div className="flex flex-col items-center justify-center font-bold text-gray-700">
+                                            <span>{currentDate.getFullYear()}年</span>
+                                            <span>{currentDate.getMonth() + 1}月</span>
                                         </div>
                                     </th>
                                     {daysInView.map(dateStr => {
