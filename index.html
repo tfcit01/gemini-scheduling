@@ -15,61 +15,6 @@
     <!-- 載入 Babel -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
-    <!-- 載入 Firebase (v11.6.1) -->
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, getDoc, setDoc, onSnapshot, collection, query, where, updateDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-        import { setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-        
-        // 設定 Firebase 日誌級別
-        // setLogLevel('debug');
-
-        // 檢查全域變數
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
-        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
-        
-        if (firebaseConfig) {
-            // 初始化 Firebase
-            const app = initializeApp(firebaseConfig);
-            window.db = getFirestore(app);
-            window.auth = getAuth(app);
-            window.appId = appId;
-            
-            console.log('Firebase initialized for App ID:', appId);
-            
-            // 登入或匿名登入
-            onAuthStateChanged(window.auth, async (user) => {
-                if (!user) {
-                    try {
-                        if (initialAuthToken) {
-                            await signInWithCustomToken(window.auth, initialAuthToken);
-                            console.log('Signed in with custom token.');
-                        } else {
-                            await signInAnonymously(window.auth);
-                            console.log('Signed in anonymously.');
-                        }
-                    } catch (error) {
-                        console.error("Firebase Auth Error:", error);
-                    }
-                } else {
-                    console.log('User is already signed in:', user.uid);
-                }
-            });
-
-            // 匯出必要的 Firestore/Auth 函式到 window 物件，供 React 腳本使用
-            // 修正重點：確保 onAuthStateChanged 被正確暴露
-            window.firebase = {
-                doc, getDoc, setDoc, onSnapshot, collection, query, where, updateDoc,
-                onAuthStateChanged
-            };
-
-        } else {
-            console.error("Firebase config is missing. Firestore features will be disabled.");
-        }
-    </script>
-
     <style>
         /* 列印樣式設定 */
         @media print {
@@ -80,689 +25,859 @@
             .print\:text-xs { font-size: 10px !important; }
             .print\:bg-gray-100 { background-color: #f3f4f6 !important; }
             .print\:border-gray-300 { border-color: #d1d5db !important; }
-            .print\:border-yellow-400 { border-color: #facc15 !important; }
-            .print\:border-r-2 { border-right-width: 2px !important; }
-            .print\:text-red-600 { color: #dc2626 !important; }
-            .print\:font-bold { font-weight: 700 !important; }
-        }
-
-        /* 隱藏預設的 Spinner 箭頭 */
-        input[type='number']::-webkit-inner-spin-button,
-        input[type='number']::-webkit-outer-spin-button {
-            -webkit-appearance: none;
-            margin: 0;
-        }
-
-        input[type='number'] {
-            -moz-appearance: textfield;
+            th, td { border: 1px solid #ccc !important; }
+            select { -webkit-appearance: none; -moz-appearance: none; text-indent: 1px; text-overflow: ''; border: none; background: transparent; }
         }
     </style>
 </head>
-<body class="bg-gray-50 min-h-screen font-sans">
+<body class="bg-gray-50 text-gray-800 font-sans">
     <div id="root"></div>
 
-    <script type="text/babel">
-        const { useState, useEffect, useCallback, useMemo } = React;
+    <!-- Firebase SDK 模組設定 -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, doc, onSnapshot, setDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        // 全域常量
-        const COLLECTION_NAME = "shift_schedule_2026";
-        const WORKERS = ['甲', '乙', '丙', '丁', '戊', '己', '庚', '辛'];
-        const SHIFTS = ['A07', 'B08', 'C09', 'D10', 'E11', 'F12', 'G01', 'H-Holiday', 'R-Rest', 'O-Other', 'B06'];
-        const SHIFT_MAP = {
-            'A07': { type: 'early', hours: 8, color: 'text-green-600' },
-            'B08': { type: 'early', hours: 8, color: 'text-green-600' },
-            'C09': { type: 'early', hours: 8, color: 'text-green-600' },
-            'D10': { type: 'early', hours: 8, color: 'text-green-600' },
-            'E11': { type: 'early', hours: 8, color: 'text-green-600' },
-            'F12': { type: 'late', hours: 8, color: 'text-blue-600' },
-            'G01': { type: 'late', hours: 8, color: 'text-blue-600' },
-            'B06': { type: 'late', hours: 8, color: 'text-blue-600' }, // B06 視為晚班, 雖然實際上是早班但接替 B08 的隔天休息規則
-            'H-Holiday': { type: 'rest', hours: 0, color: 'text-red-600' },
-            'R-Rest': { type: 'rest', hours: 0, color: 'text-red-600' },
-            'O-Other': { type: 'rest', hours: 0, color: 'text-red-600' },
+        // 將 Firebase 函式掛載到 window 物件
+        window.firebaseModules = {
+            initializeApp,
+            getAuth,
+            signInAnonymously,
+            signInWithCustomToken,
+            onAuthStateChanged,
+            getFirestore,
+            collection,
+            doc,
+            onSnapshot,
+            setDoc,
+            deleteDoc
         };
-        const DAY_NAMES = ['日', '一', '二', '三', '四', '五', '六'];
         
-        // 特殊日期規則
-        const REQUIRED_WORKERS = {
-            // 假日/國定假日: 需剛好 1早1晚
-            '2026-01-01': { total: 2, early: 1, late: 1 }, // 元旦
-            '2026-01-25': { total: 2, early: 1, late: 1 }, // 春節 (日)
-            '2026-01-26': { total: 2, early: 1, late: 1 }, // 春節
-            '2026-01-27': { total: 2, early: 1, late: 1 }, // 春節
-            '2026-01-28': { total: 2, early: 1, late: 1 }, // 春節
-            '2026-02-08': { total: 2, early: 1, late: 1 }, // 假日 (日)
-            '2026-02-15': { total: 2, early: 1, late: 1 }, // 假日 (日)
-            '2026-02-16': { total: 1, early: 1, late: 0 }, // 僅需 1早
-            '2026-02-22': { total: 2, early: 1, late: 1 }, // 假日 (日)
-            '2026-02-28': { total: 2, early: 1, late: 1 }, // 228
-            '2026-03-08': { total: 2, early: 1, late: 1 }, // 假日 (日)
-            '2026-03-15': { total: 2, early: 1, late: 1 }, // 假日 (日)
-            '2026-03-22': { total: 2, early: 1, late: 1 }, // 假日 (日)
-            '2026-03-29': { total: 2, early: 1, late: 1 }, // 假日 (日)
+        console.log("Firebase Modules Loaded");
+        window.dispatchEvent(new Event('firebase-ready'));
+    </script>
+
+    <!-- 主程式邏輯 -->
+    <script type="text/babel">
+        const { useState, useEffect, useMemo, Component } = React;
+
+        // --- 修正: 內建 SVG 圖示 (解決 CDN 載入失敗出現 ? 的問題) ---
+        const Icons = {
+            ChevronLeft: ({size=18, className}) => (
+                <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="m15 18-6-6 6-6"/></svg>
+            ),
+            ChevronRight: ({size=18, className}) => (
+                <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="m9 18 6-6-6-6"/></svg>
+            ),
+            FileDown: ({size=18, className}) => (
+                <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><path d="M12 18v-6"/><path d="m9 15 3 3 3-3"/></svg>
+            ),
+            Copy: ({size=18, className}) => (
+                <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+            ),
+            ClipboardPaste: ({size=18, className}) => (
+                <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M16 4h2a2 0 0 1 2 2v14a2 0 0 1-2 2H6a2 0 0 1-2-2V6a2 0 0 1 2-2h2"/><rect width="8" height="4" x="8" y="2" rx="1" ry="1"/></svg>
+            ),
+            CheckCircle2: ({size=18, className}) => (
+                <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>
+            ),
+            Info: ({size=18, className}) => (
+                <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+            ),
+            Save: ({size=18, className}) => (
+                <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+            ),
+            Calendar: ({size=18, className}) => (
+                <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg>
+            )
         };
 
-        // 變形工時週期結束日期 (需加上 1 天作為結算日後的第一天)
-        const CYCLE_END_DATES = ['2026-01-18', '2026-02-15', '2026-03-15'];
+        // --- Firebase 設定 (您的設定) ---
+        const YOUR_FIREBASE_CONFIG = {
+            apiKey: "AIzaSyDmmqHke3P27opSF9jBdlSj9pKEEvdwr2c",
+            authDomain: "schedule-40963.firebaseapp.com",
+            projectId: "schedule-40963",
+            storageBucket: "schedule-40963.firebasestorage.app",
+            messagingSenderId: "791945121532",
+            appId: "1:791945121532:web:505d17de838c068061d179",
+            measurementId: "G-X9KFCZJEP0"
+        };
 
-        /**
-         * 檢查班別規則：B06 隔天僅能排 A07
-         * @param {string} currentShift 當天的班別
-         * @param {string} nextShift 隔天的班別
-         * @returns {boolean} 是否符合規則
-         */
-        const checkShiftRule = (currentShift, nextShift) => {
-            if (currentShift === 'B06' && nextShift !== 'A07' && SHIFT_MAP[nextShift]?.type !== 'rest') {
-                return false;
+        // 使用 Project ID 作為路徑 ID
+        const APP_ID = "schedule-40963";
+
+        // --- 錯誤邊界元件 (防止白畫面) ---
+        class ErrorBoundary extends Component {
+            constructor(props) {
+                super(props);
+                this.state = { hasError: false, error: null, errorInfo: null };
             }
-            return true;
-        };
 
-        /**
-         * 檢查人力規則
-         * @param {string} dateString 日期字串 (YYYY-MM-DD)
-         * @param {object} dailySummary 當日早晚班人數統計 {early: number, late: number, rest: number}
-         * @returns {boolean} 是否符合規則
-         */
-        const checkManpowerRule = (dateString, dailySummary) => {
-            const date = new Date(dateString);
-            const dayOfWeek = date.getDay(); // 0 = Sunday, 6 = Saturday
-            const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
-
-            const required = REQUIRED_WORKERS[dateString];
-
-            if (required) {
-                // 特殊日期規則
-                return dailySummary.early === required.early && dailySummary.late === required.late;
-            } else if (isWeekend) {
-                // 一般週末/假日規則: 需剛好 1早1晚
-                return dailySummary.early === 1 && dailySummary.late === 1;
-            } else {
-                // 平日規則: 至少 1早1晚
-                return dailySummary.early >= 1 && dailySummary.late >= 1; 
+            static getDerivedStateFromError(error) {
+                return { hasError: true };
             }
+
+            componentDidCatch(error, errorInfo) {
+                this.setState({ error, errorInfo });
+                console.error("Uncaught error:", error, errorInfo);
+            }
+
+            render() {
+                if (this.state.hasError) {
+                    return (
+                        <div className="p-10 bg-red-50 text-red-900 border border-red-200 rounded m-10">
+                            <h1 className="text-2xl font-bold mb-4">系統發生錯誤</h1>
+                            <p className="mb-4">請截圖此畫面並提供給開發人員。</p>
+                            <pre className="bg-white p-4 rounded border border-red-200 overflow-auto text-xs">
+                                {this.state.error && this.state.error.toString()}
+                                <br />
+                                {this.state.errorInfo && this.state.errorInfo.componentStack}
+                            </pre>
+                        </div>
+                    );
+                }
+                return this.props.children;
+            }
+        }
+
+        // --- 資料設定 (更新預設名單) ---
+        const DEFAULT_STAFF_MEMBERS = ['蔡定緯', '林家傑', '邱奕瑋', '陶楷頤'];
+
+        const SHIFT_OPTIONS = [
+            { value: '', label: '-' },
+            { value: 'A13', label: 'A13 (早)' },
+            { value: 'A07', label: 'A07 (早)' },
+            { value: 'B05', label: 'B05 (晚)' },
+            { value: 'B06', label: 'B06 (晚)' },
+            { value: 'H', label: 'H (國定)' },
+            { value: 'R', label: 'R (休息)' },
+            { value: 'O', label: 'O (例假)' },
+        ];
+
+        // 2026 年國定假日 (只包含需要列入 H 假計算的日期)
+        const HOLIDAYS_2026 = [
+            { date: '2026-01-01', name: '元旦' },
+            { date: '2026-02-16', name: '小年夜(彈性放假)' }, 
+            { date: '2026-02-17', name: '除夕' },
+            { date: '2026-02-18', name: '春節' },
+            { date: '2026-02-19', name: '春節' },
+            { date: '2026-02-20', name: '春節' },
+            { date: '2026-02-27', name: '和平紀念日補假' }, 
+            { date: '2026-04-03', name: '兒童節補假' }, 
+            { date: '2026-04-06', name: '清明節補假' }, 
+            { date: '2026-05-01', name: '勞動節' },
+            { date: '2026-06-19', name: '端午節' },
+            { date: '2026-09-25', name: '中秋節' },
+            { date: '2026-10-09', name: '國慶日補假' }, 
+        ];
+
+        const CYCLES = [
+            { start: '2025-12-22', end: '2026-01-18' },
+            { start: '2026-01-19', end: '2026-02-15' },
+            { start: '2026-02-16', end: '2026-03-15' },
+            { start: '2026-03-16', end: '2026-04-12' },
+            { start: '2026-04-13', end: '2026-05-10' },
+            { start: '2026-05-11', end: '2026-06-07' },
+            { start: '2026-06-08', end: '2026-07-05' },
+            { start: '2026-07-06', end: '2026-08-02' },
+            { start: '2026-08-03', end: '2026-08-30' },
+            { start: '2026-08-31', end: '2026-09-27' },
+            { start: '2026-09-28', end: '2026-10-25' },
+            { start: '2026-10-26', end: '2026-11-22' },
+            { start: '2026-11-23', end: '2026-12-20' },
+            { start: '2026-12-21', end: '2027-01-17' },
+        ];
+
+        // --- 輔助函式 ---
+        const isWeekend = (dateStr) => {
+            const day = new Date(dateStr).getDay();
+            return day === 0 || day === 6;
         };
 
-        /**
-         * 轉換日期物件為 YYYY-MM-DD 字串
-         */
+        const isHolidayOrWeekend = (dateStr) => {
+            const isHol = HOLIDAYS_2026.some(h => h.date === dateStr);
+            return isHol || isWeekend(dateStr);
+        };
+
         const formatDate = (date) => {
-            const d = new Date(date);
-            let month = '' + (d.getMonth() + 1);
-            let day = '' + d.getDate();
-            const year = d.getFullYear();
-
-            if (month.length < 2) month = '0' + month;
-            if (day.length < 2) day = '0' + day;
-
-            return [year, month, day].join('-');
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            return `${year}-${month}-${day}`;
         };
 
         /**
-         * 獲取一個月的所有日期 (包含上個月和下個月的補齊日期)
-         * @param {number} year 年
-         * @param {number} month 月 (1-12)
-         * @returns {Array<{date: Date, isCurrentMonth: boolean, dateString: string}>}
+         * 取得從 1 月 1 日到指定日期的所有日期字串
+         * @param {string} endDateStr 格式 YYYY-MM-DD
+         * @returns {string[]} 日期字串陣列
          */
-        const getMonthDates = (year, month) => {
-            const firstDayOfMonth = new Date(year, month - 1, 1);
-            const lastDayOfMonth = new Date(year, month, 0);
-
+        const getDatesFromYearStart = (endDateStr) => {
             const dates = [];
-            
-            // 補齊前一個月的日期 (讓第一天是星期日)
-            let dayOfWeekOfFirstDay = firstDayOfMonth.getDay();
-            if (dayOfWeekOfFirstDay !== 0) {
-                for (let i = dayOfWeekOfFirstDay; i > 0; i--) {
-                    const date = new Date(firstDayOfMonth);
-                    date.setDate(firstDayOfMonth.getDate() - i);
-                    dates.push({ date, isCurrentMonth: false, dateString: formatDate(date) });
-                }
-            }
-            
-            // 當月日期
-            for (let i = 1; i <= lastDayOfMonth.getDate(); i++) {
-                const date = new Date(year, month - 1, i);
-                dates.push({ date, isCurrentMonth: true, dateString: formatDate(date) });
-            }
+            const year = new Date(endDateStr).getFullYear();
+            const startDate = new Date(year, 0, 1); // 1月1日
+            let currentDate = startDate;
+            const endDate = new Date(endDateStr);
 
-            // 補齊下一個月的日期 (讓最後一天是星期六)
-            let dayOfWeekOfLastDay = lastDayOfMonth.getDay();
-            if (dayOfWeekOfLastDay !== 6) {
-                for (let i = 1; i <= (6 - dayOfWeekOfLastDay); i++) {
-                    const date = new Date(lastDayOfMonth);
-                    date.setDate(lastDayOfMonth.getDate() + i);
-                    dates.push({ date, isCurrentMonth: false, dateString: formatDate(date) });
-                }
+            while (currentDate <= endDate) {
+                dates.push(formatDate(currentDate));
+                currentDate.setDate(currentDate.getDate() + 1);
             }
-
             return dates;
-        };
+        }
 
-
-        // =================================================================
-        // React App Component
-        // =================================================================
-
-        const App = () => {
-            const [currentMonth, setCurrentMonth] = useState(1);
-            const [currentYear, setCurrentYear] = useState(2026);
+        // --- 主程式元件 ---
+        function ScheduleApp() {
+            const [user, setUser] = useState(null);
+            const [fb, setFb] = useState(null);
+            const [currentDate, setCurrentDate] = useState(new Date(2026, 0, 1));
             const [scheduleData, setScheduleData] = useState({});
-            const [selectedMonth, setSelectedMonth] = useState(1); // 用於月份選擇器
-            const [selectedYear, setSelectedYear] = useState(2026); // 用於年份選擇器
-            const [userId, setUserId] = useState(null);
-            const [isAuthReady, setIsAuthReady] = useState(false);
-            const [isSaving, setIsSaving] = useState(false);
-            const [saveMessage, setSaveMessage] = useState('');
-            const [isDraftMode, setIsDraftMode] = useState(false); // 預排模式 (淺藍底色)
-            const [draftData, setDraftData] = useState({}); // 預排資料 (未儲存到 Firestore)
+            const [staffNames, setStaffNames] = useState(DEFAULT_STAFF_MEMBERS);
+            const [isTentativeMode, setIsTentativeMode] = useState(false);
+            const [loading, setLoading] = useState(true);
+            const [loadingError, setLoadingError] = useState(null);
 
-            // 存儲資料庫實例
-            const [db, setDb] = useState(null);
-            const [appId, setAppId] = useState(null);
-            const [auth, setAuth] = useState(null);
+            // Copy/Paste States
+            const [isCopyMode, setIsCopyMode] = useState(false);
+            const [copiedShiftValue, setCopiedShiftValue] = useState(null);
+            const [copySourceKey, setCopySourceKey] = useState(null);
+            const [copiedRowData, setCopiedRowData] = useState(null);
+            const [copySourceRowIndex, setCopySourceRowIndex] = useState(null);
 
-            // ===================================
-            // Firebase/Auth Setup (修正錯誤的核心區塊)
-            // ===================================
-
+            // 初始化 Firebase
             useEffect(() => {
-                if (window.db && window.auth && window.appId && window.firebase.onAuthStateChanged) {
-                    setDb(window.db);
-                    setAuth(window.auth);
-                    setAppId(window.appId);
-
-                    // 修正：使用 window.firebase.onAuthStateChanged 函式並傳入 window.auth 實例
-                    const unsubscribe = window.firebase.onAuthStateChanged(window.auth, (user) => {
-                        if (user) {
-                            setUserId(user.uid);
-                            console.log("Auth State Changed: User ID set to", user.uid);
-                        } else {
-                            // 應該在 module script 中處理登入，此處只做狀態監聽
-                            setUserId(null); 
-                            console.log("Auth State Changed: User is signed out or anonymous.");
+                const init = async () => {
+                    try {
+                        // 等待 window.firebaseModules 載入
+                        let attempts = 0;
+                        while (!window.firebaseModules && attempts < 20) {
+                            await new Promise(resolve => setTimeout(resolve, 100));
+                            attempts++;
                         }
-                        setIsAuthReady(true); // 認證狀態已準備好，可以開始讀取 Firestore
-                    });
+                        
+                        if (!window.firebaseModules) {
+                            throw new Error("Firebase SDK 載入超時");
+                        }
+                        
+                        const { initializeApp, getAuth, signInAnonymously, onAuthStateChanged, getFirestore } = window.firebaseModules;
+                        
+                        console.log("Initializing Firebase...");
+                        const app = initializeApp(YOUR_FIREBASE_CONFIG);
+                        const auth = getAuth(app);
+                        const db = getFirestore(app);
+                        
+                        setFb({ auth, db });
 
-                    return () => {
-                        console.log("Detaching Auth listener.");
-                        unsubscribe();
-                    };
-                } else if (!window.firebase?.onAuthStateChanged) {
-                    // 如果 Firebase 函式未暴露，則僅標記認證完成，但無法使用即時功能
-                    setIsAuthReady(true);
-                    console.error("Firebase Auth Listener function is missing from window.firebase.");
-                }
-            }, []); // Run only once for initialization
+                        // 登入邏輯
+                        await signInAnonymously(auth);
+                        
+                        onAuthStateChanged(auth, (u) => {
+                            console.log("Auth State Changed:", u ? "Logged In" : "Logged Out");
+                            setUser(u);
+                            if(u) setLoading(false);
+                        });
 
-
-            // ===================================
-            // Data Fetching (Firestore onSnapshot)
-            // ===================================
-
-            useEffect(() => {
-                if (!db || !userId || !isAuthReady) {
-                    console.log("Waiting for DB, Auth, or Auth Ready...");
-                    return;
-                }
-
-                // Firestore collection path
-                // Public data path: /artifacts/{appId}/public/data/{COLLECTION_NAME}
-                const docRef = window.firebase.doc(db, 'artifacts', appId, 'public', 'data', COLLECTION_NAME);
-                
-                console.log("Attaching onSnapshot listener to:", docRef.path);
-
-                const unsubscribe = window.firebase.onSnapshot(docRef, (docSnap) => {
-                    if (docSnap.exists()) {
-                        const data = docSnap.data();
-                        // 確保只有排班資料被設置，並忽略其他可能的欄位
-                        const schedule = Object.keys(data).reduce((acc, key) => {
-                            if (key.match(/^\d{4}-\d{2}-\d{2}$/)) {
-                                acc[key] = data[key];
-                            }
-                            return acc;
-                        }, {});
-                        setScheduleData(schedule);
-                        console.log("Fetched new schedule data:", Object.keys(schedule).length, "days");
-                    } else {
-                        setScheduleData({});
-                        console.log("Document does not exist, starting fresh.");
+                    } catch (error) {
+                        console.error("Firebase Init Error:", error);
+                        setLoadingError(error.message);
+                        setLoading(false);
                     }
-                    setDraftData({}); // 每次從 Firestore 讀取新資料後，清除預排
-                }, (error) => {
-                    console.error("Firestore onSnapshot error:", error);
-                });
+                };
+                init();
+            }, []);
+
+            // 監聽資料
+            useEffect(() => {
+                if (!user || !fb) return;
+                const { collection, doc, onSnapshot } = window.firebaseModules;
+
+                console.log("Setting up snapshot listeners...");
+
+                // 1. 監聽排班表
+                const unsubSchedule = onSnapshot(
+                    collection(fb.db, 'artifacts', APP_ID, 'public', 'data', 'roster_2026'), 
+                    (snapshot) => {
+                        const data = {};
+                        snapshot.docs.forEach(doc => {
+                            data[doc.id] = doc.data();
+                        });
+                        setScheduleData(data);
+                    },
+                    (error) => {
+                        console.error("Error fetching schedule:", error);
+                        alert(`讀取班表失敗: ${error.message}`);
+                    }
+                );
+
+                // 2. 監聽員工姓名
+                const unsubStaff = onSnapshot(
+                    doc(fb.db, 'artifacts', APP_ID, 'public', 'data', 'settings', 'staff_names'),
+                    (docSnap) => {
+                        if (docSnap.exists()) {
+                            const data = docSnap.data();
+                            if (data && data.names && Array.isArray(data.names)) {
+                                setStaffNames(data.names);
+                            }
+                        }
+                    },
+                    (error) => console.error("Error fetching staff names:", error)
+                );
 
                 return () => {
-                    console.log("Detaching onSnapshot listener.");
-                    unsubscribe();
+                    unsubSchedule();
+                    unsubStaff();
                 };
-            }, [db, userId, appId, isAuthReady]); // Depend on db, userId, and isAuthReady
+            }, [user, fb]);
 
-            // ===================================
-            // Data Manipulation and Saving
-            // ===================================
-
-            /**
-             * 根據當前模式 (正式/預排) 獲取資料
-             */
-            const getCurrentData = useCallback(() => {
-                return isDraftMode ? { ...scheduleData, ...draftData } : scheduleData;
-            }, [scheduleData, draftData, isDraftMode]);
-
-
-            /**
-             * 處理班別變更
-             * @param {string} dateString YYYY-MM-DD
-             * @param {string} worker 員工名稱
-             * @param {string} shift 新班別
-             */
-            const handleShiftChange = useCallback((dateString, worker, shift) => {
-                const newData = getCurrentData();
-                const dayData = newData[dateString] || {};
-                
-                // 更新當天該員工的班別
-                const newDayData = {
-                    ...dayData,
-                    [worker]: shift,
-                };
-
-                const updatedData = {
-                    ...scheduleData,
-                    ...draftData,
-                    [dateString]: newDayData,
-                };
-                
-                if (isDraftMode) {
-                    // 更新 draftData
-                    setDraftData(prev => ({
-                        ...prev,
-                        [dateString]: newDayData
-                    }));
-                } else {
-                    // 更新 scheduleData (直接進入儲存流程)
-                    // Note: Here we are updating scheduleData state first for immediate UI refresh
-                    setScheduleData(updatedData);
-                    // And then triggering the save with the full updated data
-                    saveSchedule(updatedData); 
-                }
-            }, [scheduleData, draftData, isDraftMode, getCurrentData]);
-
-            /**
-             * 儲存資料到 Firestore
-             * @param {object} data 要儲存的排班資料
-             */
-            const saveSchedule = useCallback(async (data) => {
-                if (!db || !userId || isDraftMode) {
-                    console.warn("Cannot save: DB not ready, user not authenticated, or currently in draft mode.");
-                    if (isDraftMode) {
-                        setSaveMessage('請先切換至「正式模式」再儲存。');
-                        setTimeout(() => setSaveMessage(''), 3000);
-                    }
+            // --- Handlers ---
+            const handleShiftChange = async (dateStr, staffIndex, value) => {
+                if (!user || !fb) {
+                    alert("尚未連線到資料庫，無法儲存");
                     return;
                 }
+                const { doc, setDoc, deleteDoc } = window.firebaseModules;
 
-                setIsSaving(true);
-                setSaveMessage('儲存中...');
-                
-                // Public data path: /artifacts/{appId}/public/data/{COLLECTION_NAME}
-                const docRef = window.firebase.doc(db, 'artifacts', appId, 'public', 'data', COLLECTION_NAME);
-
-                // 準備要寫入的資料 (只儲存排班數據)
-                const dataToSave = Object.keys(data).reduce((acc, key) => {
-                    if (key.match(/^\d{4}-\d{2}-\d{2}$/)) {
-                        acc[key] = data[key];
-                    }
-                    return acc;
-                }, {});
+                const docId = `${dateStr}_${staffIndex}`;
+                const docRef = doc(fb.db, 'artifacts', APP_ID, 'public', 'data', 'roster_2026', docId);
 
                 try {
-                    // 使用 setDoc 進行寫入，merge: true 確保只更新排班資料而不影響其他可能的欄位
-                    await window.firebase.setDoc(docRef, dataToSave, { merge: true });
-                    setSaveMessage('儲存成功！');
-                    console.log("Schedule saved successfully.");
-                } catch (error) {
-                    setSaveMessage('儲存失敗：' + error.message);
-                    console.error("Error saving schedule:", error);
-                } finally {
-                    setIsSaving(false);
-                    setTimeout(() => setSaveMessage(''), 3000);
-                }
-            }, [db, userId, appId, isDraftMode]);
-
-
-            // ===================================
-            // Computed Values
-            // ===================================
-
-            const allDates = useMemo(() => getMonthDates(currentYear, currentMonth), [currentYear, currentMonth]);
-            const scheduleForDisplay = getCurrentData();
-
-            // 計算每日人力總結和規則驗證
-            const dailySummaries = useMemo(() => {
-                return allDates.reduce((acc, { dateString }) => {
-                    const dayData = scheduleForDisplay[dateString] || {};
-                    let early = 0;
-                    let late = 0;
-                    let rest = 0;
-
-                    Object.values(dayData).forEach(shift => {
-                        const shiftInfo = SHIFT_MAP[shift];
-                        if (shiftInfo) {
-                            if (shiftInfo.type === 'early') early++;
-                            else if (shiftInfo.type === 'late') late++;
-                            else if (shiftInfo.type === 'rest') rest++;
-                        }
-                    });
-
-                    const manpowerValid = checkManpowerRule(dateString, { early, late, rest });
-
-                    acc[dateString] = { early, late, rest, manpowerValid };
-                    return acc;
-                }, {});
-            }, [allDates, scheduleForDisplay]);
-
-            // 計算每日班別規則驗證
-            const shiftRuleViolations = useMemo(() => {
-                const violations = {};
-                for (let i = 0; i < allDates.length - 1; i++) {
-                    const currentDay = allDates[i].dateString;
-                    const nextDay = allDates[i + 1].dateString;
-
-                    const currentDayData = scheduleForDisplay[currentDay] || {};
-                    const nextDayData = scheduleForDisplay[nextDay] || {};
-                    
-                    WORKERS.forEach(worker => {
-                        const currentShift = currentDayData[worker];
-                        const nextShift = nextDayData[worker];
-
-                        if (currentShift && nextShift && !checkShiftRule(currentShift, nextShift)) {
-                            // 記錄違規
-                            if (!violations[currentDay]) violations[currentDay] = {};
-                            violations[currentDay][worker] = true;
-                        }
-                    });
-                }
-                return violations;
-            }, [allDates, scheduleForDisplay]);
-            
-            // 找出今天
-            const todayString = useMemo(() => formatDate(new Date()), []);
-            
-            // 總工時計算
-            const totalHoursSummary = useMemo(() => {
-                const summary = WORKERS.reduce((acc, worker) => {
-                    acc[worker] = { totalHours: 0, earlyShifts: 0, lateShifts: 0, restDays: 0, cycleHours: 0 };
-                    return acc;
-                }, {});
-
-                // 找出當前月份的索引範圍
-                const currentMonthDates = allDates.filter(d => d.isCurrentMonth);
-                const firstDayOfMonth = currentMonthDates[0]?.dateString;
-                const lastDayOfMonth = currentMonthDates[currentMonthDates.length - 1]?.dateString;
-
-                // 總結當月工時
-                allDates.filter(d => d.isCurrentMonth).forEach(({ dateString }) => {
-                    const dayData = scheduleForDisplay[dateString] || {};
-                    WORKERS.forEach(worker => {
-                        const shift = dayData[worker];
-                        const shiftInfo = SHIFT_MAP[shift];
-                        if (shiftInfo) {
-                            summary[worker].totalHours += shiftInfo.hours;
-                            if (shiftInfo.type === 'early') summary[worker].earlyShifts++;
-                            else if (shiftInfo.type === 'late') summary[worker].lateShifts++;
-                            else if (shiftInfo.type === 'rest') summary[worker].restDays++;
-                        }
-                    });
-                });
-                
-                // 計算變形工時週期工時 (從本月 1 號開始)
-                WORKERS.forEach(worker => {
-                    let cycleHours = 0;
-                    // 假設週期結算日是 1/18, 2/15, 3/15
-                    let cycleStart = new Date(currentYear, currentMonth - 1, 1);
-                    
-                    // 找到上一個週期結算日，從它隔天開始算
-                    for(const end of CYCLE_END_DATES){
-                         const endDate = new Date(end);
-                         if(endDate < cycleStart){
-                            cycleStart = new Date(endDate);
-                            cycleStart.setDate(endDate.getDate() + 1); // 結算日隔天
-                         }
+                    if (value === '') {
+                        await deleteDoc(docRef);
+                    } else {
+                        await setDoc(docRef, {
+                            value,
+                            tentative: isTentativeMode,
+                            updatedBy: user.uid,
+                            updatedAt: new Date().toISOString()
+                        }, { merge: true });
                     }
-                    
-                    // 檢查從週期開始日到本月底的工時
-                    allDates.forEach(({ date, dateString }) => {
-                        // 確保 dateString 屬於當前顯示的月份
-                        if(date >= cycleStart && dateString <= lastDayOfMonth) {
-                            const dayData = scheduleForDisplay[dateString] || {};
-                            const shift = dayData[worker];
-                            const shiftInfo = SHIFT_MAP[shift];
-                            if (shiftInfo) {
-                                cycleHours += shiftInfo.hours;
-                            }
+                } catch (e) {
+                    console.error("Save failed:", e);
+                    alert("儲存失敗: " + e.message);
+                }
+            };
+
+            const handleStaffNameChange = async (index, newName) => {
+                const newNames = [...staffNames];
+                newNames[index] = newName;
+                setStaffNames(newNames); // Optimistic update
+                
+                if (user && fb) {
+                    const { doc, setDoc } = window.firebaseModules;
+                    await setDoc(doc(fb.db, 'artifacts', APP_ID, 'public', 'data', 'settings', 'staff_names'), {
+                        names: newNames,
+                        updatedBy: user.uid
+                    }, { merge: true });
+                }
+            };
+
+            const handlePrint = () => {
+                window.print();
+            };
+
+            // --- Copy/Paste Logic ---
+            const toggleCopyMode = () => {
+                setIsCopyMode(prev => !prev);
+                setCopiedShiftValue(null);
+                setCopySourceKey(null);
+                setCopiedRowData(null);
+                setCopySourceRowIndex(null);
+            };
+
+            const getShift = (dateStr, staffIndex) => {
+                const key = `${dateStr}_${staffIndex}`;
+                return scheduleData[key] || { value: '', tentative: false };
+            };
+
+            const handleCellClick = (dateStr, staffIndex) => {
+                if (!isCopyMode) return;
+                
+                if (copiedRowData) {
+                    setCopiedRowData(null);
+                    setCopySourceRowIndex(null);
+                }
+                
+                const currentShift = getShift(dateStr, staffIndex).value;
+                const currentKey = `${dateStr}_${staffIndex}`;
+
+                if (copiedShiftValue === null || currentKey === copySourceKey) {
+                    if (currentShift) {
+                        setCopiedShiftValue(currentShift);
+                        setCopySourceKey(currentKey);
+                    } else {
+                        setCopiedShiftValue(null);
+                        setCopySourceKey(null);
+                    }
+                } else {
+                    if (currentShift === copiedShiftValue) return;
+                    handleShiftChange(dateStr, staffIndex, copiedShiftValue);
+                }
+            };
+
+            const handleRowClick = async (staffIndex) => {
+                if (!isCopyMode) return;
+
+                if (copiedShiftValue) {
+                    setCopiedShiftValue(null);
+                    setCopySourceKey(null);
+                }
+
+                if (copiedRowData === null || copySourceRowIndex === staffIndex) {
+                    if (copySourceRowIndex === staffIndex) {
+                        setCopiedRowData(null);
+                        setCopySourceRowIndex(null);
+                    } else {
+                        const rowData = {};
+                        daysInView.forEach(dateStr => {
+                            const shift = getShift(dateStr, staffIndex).value;
+                            if (shift) rowData[dateStr] = shift;
+                        });
+                        setCopiedRowData(rowData);
+                        setCopySourceRowIndex(staffIndex);
+                    }
+                } else {
+                    const updates = daysInView.map(dateStr => {
+                        const val = copiedRowData[dateStr] || '';
+                        const currentVal = getShift(dateStr, staffIndex).value;
+                        if (val !== currentVal) {
+                            return handleShiftChange(dateStr, staffIndex, val);
                         }
+                        return Promise.resolve();
                     });
-                    summary[worker].cycleHours = cycleHours;
+                    await Promise.all(updates);
+                }
+            };
+
+            const getCycleForDate = (dateStr) => {
+                return CYCLES.find(c => dateStr >= c.start && dateStr <= c.end);
+            };
+
+            const changeMonth = (delta) => {
+                const newDate = new Date(currentDate);
+                newDate.setMonth(newDate.getMonth() + delta);
+                setCurrentDate(newDate);
+            };
+
+            // --- Logic & Validation ---
+            const daysInView = useMemo(() => {
+                const year = currentDate.getFullYear();
+                const month = currentDate.getMonth();
+                const days = [];
+                const date = new Date(year, month, 1);
+                while (date.getMonth() === month) {
+                    days.push(formatDate(date));
+                    date.setDate(date.getDate() + 1);
+                }
+                return days;
+            }, [currentDate]);
+
+            const intersectingCycles = useMemo(() => {
+                const currentMonth = currentDate.getMonth() + 1;
+                const currentYear = currentDate.getFullYear();
+                const currentMonthStart = `${currentYear}-${String(currentMonth).padStart(2, '0')}-01`;
+                const currentMonthEnd = `${currentYear}-${String(currentMonth).padStart(2, '0')}-31`;
+
+                return CYCLES.filter(cycle => {
+                    return cycle.start <= currentMonthEnd && cycle.end >= currentMonthStart;
+                });
+            }, [currentDate]);
+
+            const getValidationErrors = (dateStr) => {
+                const errors = [];
+                let morningCount = 0;
+                let eveningCount = 0;
+                
+                staffNames.forEach((_, idx) => {
+                    const shift = getShift(dateStr, idx).value;
+                    if (shift.startsWith('A')) morningCount++;
+                    if (shift.startsWith('B')) eveningCount++;
                 });
 
-                return summary;
-            }, [allDates, scheduleForDisplay, currentMonth, currentYear]);
-
-
-            // ===================================
-            // UI Components
-            // ===================================
-
-            /**
-             * 月份/年份選擇器
-             */
-            const MonthSelector = () => {
-                const years = [2025, 2026, 2027];
-                const months = Array.from({ length: 12 }, (_, i) => i + 1);
-
-                const handleViewChange = () => {
-                    setCurrentYear(selectedYear);
-                    setCurrentMonth(selectedMonth);
-                };
-
-                return (
-                    <div className="flex items-center space-x-2 text-sm print:hidden">
-                        <label htmlFor="year-select" className="text-gray-700">年份:</label>
-                        <select
-                            id="year-select"
-                            className="p-1 border border-gray-300 rounded"
-                            value={selectedYear}
-                            onChange={(e) => setSelectedYear(parseInt(e.target.value))}
-                        >
-                            {years.map(y => (
-                                <option key={y} value={y}>{y}</option>
-                            ))}
-                        </select>
-                        <label htmlFor="month-select" className="text-gray-700">月份:</label>
-                        <select
-                            id="month-select"
-                            className="p-1 border border-gray-300 rounded"
-                            value={selectedMonth}
-                            onChange={(e) => setSelectedMonth(parseInt(e.target.value))}
-                        >
-                            {months.map(m => (
-                                <option key={m} value={m}>{m} 月</option>
-                            ))}
-                        </select>
-                        <button
-                            className="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 transition duration-150 shadow-md"
-                            onClick={handleViewChange}
-                        >
-                            切換月份
-                        </button>
-                    </div>
-                );
+                if (dateStr === '2026-02-16') {
+                   if (morningCount !== 1) errors.push('2/16 需且僅需 1 名早班');
+                   if (eveningCount !== 0) errors.push('2/16 不需要晚班');
+                } else if (isHolidayOrWeekend(dateStr)) {
+                    if (morningCount !== 1 || eveningCount !== 1) {
+                        errors.push('假日需且僅需 1 早 1 晚');
+                    }
+                } else {
+                    if (morningCount < 1) errors.push('缺少早班');
+                    if (eveningCount < 1) errors.push('缺少晚班');
+                }
+                return errors;
             };
 
-            /**
-             * 顯示當前用戶 ID
-             */
-            const UserDisplay = () => {
-                if (!userId) return <span className="text-xs text-gray-500">認證中...</span>;
-                return (
-                    <div className="text-xs text-gray-700 p-2 bg-white rounded-lg shadow-sm">
-                        <span className="font-semibold">當前用戶 ID:</span> 
-                        <span className="ml-2 break-all text-blue-600 font-mono text-[10px]">{userId}</span>
-                    </div>
-                );
+            const checkSequenceError = (dateStr, staffIndex, currentVal) => {
+                if (!currentVal) return null;
+                const currDate = new Date(dateStr);
+                const prevDate = new Date(currDate);
+                prevDate.setDate(prevDate.getDate() - 1);
+                const prevDateStr = formatDate(prevDate);
+                const prevShift = getShift(prevDateStr, staffIndex).value;
+
+                if (prevShift === 'B06' && currentVal.startsWith('A') && currentVal !== 'A07') {
+                    return 'B06後僅能接A07';
+                }
+                return null;
             };
 
-            /**
-             * 班別輸入/選擇元件
-             */
-            const ShiftInput = ({ dateString, worker, currentShift, onShiftChange, isRuleViolated, isManpowerValid, isDraft }) => {
-                const date = new Date(dateString);
-                const dayOfWeek = date.getDay();
-                const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
-                const isCycleEnd = CYCLE_END_DATES.includes(dateString);
-                const isToday = dateString === todayString;
+            const getCycleStats = (cycle, staffIndex) => {
+                let rCount = 0;
+                let oCount = 0;
+                let iterDate = new Date(cycle.start);
+                const endDate = new Date(cycle.end);
                 
-                // 檢查是否為 H/R/O 休息類班別
-                const isRestShift = SHIFT_MAP[currentShift]?.type === 'rest';
+                while (iterDate <= endDate) {
+                    const dStr = formatDate(iterDate);
+                    const s = getShift(dStr, staffIndex).value;
+                    if (s === 'R') rCount++;
+                    if (s === 'O') oCount++;
+                    iterDate.setDate(iterDate.getDate() + 1);
+                }
+                return { rCount, oCount };
+            };
 
-                const cellClasses = `
-                    p-0.5 w-10 h-10 border border-gray-300 relative transition-all duration-100
-                    ${isDraft ? 'bg-blue-100' : 'hover:bg-gray-100'}
-                    ${isWeekend ? 'bg-gray-50 print:bg-gray-100' : 'bg-white'}
-                    ${isToday ? 'border-2 border-indigo-500' : ''}
-                    ${isCycleEnd ? 'border-r-yellow-400 border-r-2' : ''}
-                `;
+            // 修正後的 getHStats 函式：從年初累計到當前月份的最後一天
+            const getHStats = (staffIndex) => {
+                // 1. 找到當前月份的最後一天日期字串
+                const currentMonthEnd = daysInView[daysInView.length - 1];
+                
+                // 2. 取得從 1/1 到當前月份最後一天為止的所有日期
+                const datesToCheck = getDatesFromYearStart(currentMonthEnd);
 
-                const textClasses = `text-[10px] font-semibold block w-full h-full leading-8 text-center
-                    ${isRestShift ? 'text-red-600 print:text-red-600 font-bold' : SHIFT_MAP[currentShift]?.color || 'text-gray-900'}
-                `;
+                // 3. 計算累計國定假日總數 (Available)
+                const available = HOLIDAYS_2026.filter(h => {
+                    return datesToCheck.includes(h.date);
+                }).length;
 
-                // 人力規則違規標示 (僅在非休息日標示)
-                const manpowerIndicator = isManpowerValid || isRestShift ? '' : 'absolute top-0 right-0 h-1.5 w-1.5 bg-red-500 rounded-full animate-pulse';
-
-                // 班別規則違規標示 (邊框)
-                const ruleViolationClasses = isRuleViolated ? 'border-2 border-red-500' : '';
-
-                return (
-                    <td className={`${cellClasses} ${ruleViolationClasses}`}>
-                        <div className={manpowerIndicator}></div>
-                        <select
-                            value={currentShift || ''}
-                            onChange={(e) => onShiftChange(dateString, worker, e.target.value)}
-                            className={`${textClasses} appearance-none bg-transparent cursor-pointer focus:outline-none`}
-                            title={`${dateString} ${worker}：${currentShift || '未排班'}`}
-                        >
-                            <option value="">--</option>
-                            {SHIFTS.map(shift => (
-                                <option 
-                                    key={shift} 
-                                    value={shift}
-                                    className={SHIFT_MAP[shift]?.color || 'text-gray-900'}
-                                >
-                                    {shift.replace('-Holiday', '').replace('-Rest', '').replace('-Other', '')}
-                                </option>
-                            ))}
-                        </select>
-                    </td>
-                );
+                // 4. 計算累計已使用 H 假天數 (Used)
+                let used = 0;
+                datesToCheck.forEach(dateStr => {
+                    const key = `${dateStr}_${staffIndex}`;
+                    if (scheduleData[key] && scheduleData[key].value === 'H') {
+                        used++;
+                    }
+                });
+                
+                return { 
+                    available, 
+                    used, 
+                    remaining: available - used 
+                };
             };
             
-            /**
-             * 主排班表
-             */
-            const ShiftTable = () => {
-                const currentData = getCurrentData();
-
+            if (loadingError) {
                 return (
-                    <div className="overflow-x-auto rounded-lg shadow-xl bg-white p-4">
-                        <h2 className="text-xl font-bold mb-4 text-gray-800 print:text-base print:mb-2">
-                            {currentYear} 年 {currentMonth} 月 排班表
-                        </h2>
-                        <table className="min-w-full divide-y divide-gray-200 border-collapse">
-                            {/* 表頭：日期和星期 */}
+                    <div className="flex items-center justify-center min-h-screen bg-red-50">
+                        <div className="bg-white p-6 rounded shadow-lg border border-red-200">
+                            <h2 className="text-xl font-bold text-red-600 mb-2">系統載入失敗</h2>
+                            <p className="text-gray-700">{loadingError}</p>
+                            <p className="text-sm text-gray-500 mt-4">請檢查 Firebase Console 設定是否正確。</p>
+                        </div>
+                    </div>
+                );
+            }
+
+            if (loading) {
+                return (
+                    <div className="flex items-center justify-center min-h-screen">
+                        <div className="text-center">
+                            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+                            <div className="text-gray-600">排班系統載入中... (Firebase 連線中)</div>
+                        </div>
+                    </div>
+                );
+            }
+
+            // 安全渲染圖示 (直接從 Icons 物件取得)
+            const Icon = ({ name, size = 18, className }) => {
+                const SvgIcon = Icons[name];
+                if (!SvgIcon) return <span className="text-red-500 font-bold" title={name}>?</span>;
+                return <SvgIcon size={size} className={className} />;
+            };
+
+            return (
+                <div className="min-h-screen bg-gray-50 text-gray-800 font-sans p-4 print:p-0 print:bg-white">
+                    {/* Header: 改為 w-full 以與表格對齊 */}
+                    <div className="w-full mb-6 flex flex-col md:flex-row justify-between items-center gap-4 bg-white p-4 rounded-lg shadow-sm border border-gray-200 print:hidden">
+                        <div>
+                            <h1 className="text-2xl font-bold text-blue-800">2026 線上排班系統</h1>
+                            <p className="text-sm text-gray-500">四週變形工時 | 自動檢核 | 即時儲存</p>
+                        </div>
+
+                        <div className="flex items-center bg-gray-100 rounded-lg p-1">
+                            <button onClick={() => changeMonth(-1)} className="p-2 hover:bg-white rounded-md transition"><Icon name="ChevronLeft" size={20} /></button>
+                            <span className="px-4 font-semibold text-lg w-36 text-center">
+                                {currentDate.getFullYear()}年 {currentDate.getMonth() + 1}月
+                            </span>
+                            <button onClick={() => changeMonth(1)} className="p-2 hover:bg-white rounded-md transition"><Icon name="ChevronRight" size={20} /></button>
+                        </div>
+                        
+                        <div className="flex items-center gap-4">
+                            
+                            <button 
+                                onClick={toggleCopyMode} 
+                                className={`flex items-center gap-2 px-4 py-2 rounded transition shadow-sm font-medium text-sm border
+                                    ${isCopyMode 
+                                        ? 'bg-green-600 text-white hover:bg-green-700 border-green-600' 
+                                        : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                                    }`}
+                                title={isCopyMode ? '點擊退出複製模式' : '啟用後可點擊儲存格複製，或點擊同仁姓名複製整列'}
+                            >
+                                {copiedShiftValue || copiedRowData ? <Icon name="ClipboardPaste" size={18} /> : <Icon name="Copy" size={18} />}
+                                {isCopyMode 
+                                    ? (copiedShiftValue 
+                                        ? `貼上 (${copiedShiftValue})` 
+                                        : (copiedRowData ? '貼上整列' : '請選擇複製來源'))
+                                    : '啟用快速複製'}
+                            </button>
+                            
+                            <label className={`flex items-center gap-2 px-3 py-2 rounded cursor-pointer transition select-none border ${isTentativeMode ? 'bg-blue-100 text-blue-700 border-blue-300 shadow-inner' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`}>
+                                <input 
+                                    type="checkbox" 
+                                    checked={isTentativeMode} 
+                                    onChange={(e) => setIsTentativeMode(e.target.checked)} 
+                                    className="w-4 h-4 text-blue-600"
+                                />
+                                <span className="text-sm font-medium">預排模式 (淺藍)</span>
+                            </label>
+                            
+                            <button onClick={handlePrint} className="flex items-center gap-2 px-4 py-2 bg-slate-800 text-white rounded hover:bg-slate-700 transition shadow-sm">
+                                <Icon name="FileDown" size={18} /> 輸出 PDF / 列印
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Print Header */}
+                    <div className="hidden print:block mb-4 text-center border-b pb-2">
+                        <h1 className="text-2xl font-bold">2026年 {currentDate.getFullYear()}年 {currentDate.getMonth() + 1}月 輪值班表</h1>
+                    </div>
+
+                    {/* Stats Panel: 改為 w-full 以與表格對齊 */}
+                    <div className="w-full mb-6 grid grid-cols-1 md:grid-cols-4 gap-4 print:hidden">
+                        {staffNames.map((staff, idx) => {
+                            const hStats = getHStats(idx);
+                            
+                            return (
+                                <div key={idx} className="bg-white p-3 rounded shadow-sm border-t-4 border-blue-500 text-sm">
+                                    <div className="font-bold text-gray-700 text-lg mb-1">{staff || `同仁 ${String.fromCharCode(65+idx)}`}</div>
+                                    <div className="grid grid-cols-2 gap-2">
+                                        <div className="bg-red-50 p-2 rounded">
+                                            <span className="block text-xs text-gray-500">國定假 (H)</span>
+                                            {/* 修正 H 假顯示邏輯，現在是從年初累計 */}
+                                            <div className={`font-mono font-bold ${hStats.remaining >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                                餘 {hStats.remaining} <span className="text-[10px] text-gray-400">/ {hStats.available} (累計)</span>
+                                            </div>
+                                        </div>
+                                        <div className="bg-gray-50 p-2 rounded">
+                                            <span className="block text-xs text-gray-500">週期 R/O (需各4)</span>
+                                            {intersectingCycles.length > 0 ? (
+                                                intersectingCycles.map((cycle, cycleIdx) => {
+                                                    const roStats = getCycleStats(cycle, idx);
+                                                    return (
+                                                        <div key={cycleIdx} className="mt-1">
+                                                            <div className="font-mono text-[11px] font-bold text-gray-700">
+                                                                {cycle.start.slice(5)} - {cycle.end.slice(5)} 結算
+                                                            </div>
+                                                            <div className="font-mono text-sm">
+                                                                <span className={roStats.rCount < 4 ? 'text-red-500 font-bold' : 'text-green-600'}>R:{roStats.rCount} </span>
+                                                                <span className={roStats.oCount < 4 ? 'text-red-500 font-bold' : 'text-green-600'}>O:{roStats.oCount}</span>
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })
+                                            ) : (
+                                                <div className="text-[10px] text-gray-400">本月無結算週期</div>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+
+                    {/* Main Grid */}
+                    <div className="w-full overflow-x-auto bg-white shadow rounded-lg border border-gray-200 print:shadow-none print:border-none print:overflow-visible">
+                        <table className="w-full min-w-[1200px] border-collapse text-sm print:text-xs">
                             <thead>
                                 <tr>
-                                    <th className="sticky left-0 bg-gray-200 p-2 text-xs font-semibold text-gray-600 border border-gray-300 w-16 print:w-10 print:p-1 print:text-xs print:bg-gray-100">
-                                        員工 \ 日期
+                                    {/* 修正：縮小寬度 min-w-[80px]，顯示年/月並斷行 */}
+                                    <th className="sticky left-0 z-20 bg-gray-100 print:bg-white p-2 border-b border-r min-w-[80px] text-center align-middle">
+                                        <div className="flex flex-col items-center justify-center font-bold text-gray-700">
+                                            <span>{currentDate.getFullYear()}年</span>
+                                            <span>{currentDate.getMonth() + 1}月</span>
+                                        </div>
                                     </th>
-                                    {allDates.map(({ date, isCurrentMonth, dateString }) => {
-                                        const dayOfWeek = date.getDay(); // 0 = Sunday
-                                        const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
-                                        const isCycleEnd = CYCLE_END_DATES.includes(dateString);
-                                        const isToday = dateString === todayString;
+                                    {daysInView.map(dateStr => {
+                                        const date = new Date(dateStr);
+                                        const dayOfWeek = date.getDay();
+                                        const weekDays = ['日', '一', '二', '三', '四', '五', '六'];
+                                        const isWknd = dayOfWeek === 0 || dayOfWeek === 6;
+                                        const isHol = HOLIDAYS_2026.some(h => h.date === dateStr);
+                                        const cycle = getCycleForDate(dateStr);
+                                        const isCycleEnd = cycle?.end === dateStr;
 
-                                        const dayClasses = `
-                                            p-2 text-center text-xs font-medium w-10
-                                            ${isCurrentMonth ? 'text-gray-900' : 'text-gray-400'}
-                                            ${isWeekend ? 'bg-red-100 print:bg-gray-200' : 'bg-gray-100 print:bg-gray-100'}
-                                            ${isToday ? 'border-2 border-indigo-500' : 'border border-gray-300'}
-                                            ${isCycleEnd ? 'border-r-yellow-400 border-r-2 bg-yellow-100 print:bg-yellow-100' : ''}
-                                        `;
                                         return (
-                                            <th key={dateString} className={dayClasses} title={dateString}>
-                                                <div className="flex flex-col gap-0.5">
-                                                    <span>{date.getDate()}</span>
-                                                    <span className="font-normal text-xs">{DAY_NAMES[dayOfWeek]}</span>
+                                            <th key={dateStr} className={`p-1 border-b min-w-[45px] relative group border-gray-300
+                                                ${isCycleEnd ? 'bg-yellow-50 border-r-2 border-r-yellow-400' : 'border-r'} 
+                                                ${isHol ? 'bg-red-50' : 'bg-white'}
+                                            `}>
+                                                <div className={`text-xs ${isWknd || isHol ? 'text-red-600 font-bold' : 'text-gray-600'}`}>
+                                                    {date.getDate()}
                                                 </div>
+                                                <div className={`text-[10px] ${isWknd || isHol ? 'text-red-500' : 'text-gray-400'}`}>
+                                                    {weekDays[dayOfWeek]}
+                                                </div>
+                                                {isCycleEnd && (
+                                                    <div className="absolute top-0 right-0 w-2 h-2 bg-yellow-400 rounded-bl-full print:hidden" title="週期結算日"></div>
+                                                )}
+                                                {getValidationErrors(dateStr).length > 0 && (
+                                                    <div className="absolute -bottom-1 left-1/2 transform -translate-x-1/2 print:hidden">
+                                                        <div className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse"></div>
+                                                        <div className="hidden group-hover:block absolute top-4 left-0 z-50 bg-red-800 text-white text-xs p-2 rounded w-32 shadow-lg">
+                                                            {getValidationErrors(dateStr).join(', ')}
+                                                        </div>
+                                                    </div>
+                                                )}
                                             </th>
                                         );
                                     })}
                                 </tr>
                             </thead>
-                            {/* 表身：員工排班 */}
-                            <tbody className="divide-y divide-gray-200">
-                                {WORKERS.map(worker => (
-                                    <tr key={worker}>
-                                        <td className="sticky left-0 bg-gray-200 p-2 text-sm font-semibold text-gray-700 border border-gray-300 w-16 text-center print:w-10 print:p-1 print:text-xs print:bg-gray-100">
-                                            {worker}
-                                        </td>
-                                        {allDates.map(({ dateString }, index) => {
-                                            const currentShift = currentData[dateString]?.[worker] || '';
-                                            const nextDateString = allDates[index + 1]?.dateString;
-                                            
-                                            // 檢查隔日規則 (B06 -> A07)
-                                            let isRuleViolated = false;
-                                            if (nextDateString) {
-                                                const nextShift = currentData[nextDateString]?.[worker] || '';
-                                                if (!checkShiftRule(currentShift, nextShift)) {
-                                                    isRuleViolated = true;
-                                                }
-                                            }
+                            <tbody>
+                                {staffNames.map((staffName, staffIdx) => {
+                                    const isCopySource = copySourceRowIndex === staffIdx;
+                                    const isCopyDestination = isCopyMode && copiedRowData && !isCopySource;
 
-                                            return (
-                                                <ShiftInput
-                                                    key={dateString}
-                                                    dateString={dateString}
-                                                    worker={worker}
-                                                    currentShift={currentShift}
-                                                    onShiftChange={handleShiftChange}
-                                                    isRuleViolated={isRuleViolated}
-                                                    isManpowerValid={dailySummaries[dateString]?.manpowerValid}
-                                                    isDraft={isDraftMode && !!draftData[dateString]?.[worker] && (draftData[dateString]?.[worker] !== scheduleData[dateString]?.[worker])} // 僅在預排模式下，且與正式資料不同時標記
-                                                />
-                                            );
-                                        })}
-                                    </tr>
-                                ))}
-                                {/* 總計列：顯示每日早晚班人數 */}
-                                <tr>
-                                    <td className="sticky left-0 bg-gray-300 p-2 text-xs font-semibold text-gray-700 border border-gray-300 w-16 text-center print:w-10 print:p-1 print:text-xs print:bg-gray-200">
-                                        總計 (早/晚)
+                                    // 計算本月晚班負責人 (2026/1月=陶楷頤=Index 3, 2月=Index 0...)
+                                    // 公式: (總月數差 + 3) % 4
+                                    const totalMonths = (currentDate.getFullYear() - 2026) * 12 + currentDate.getMonth();
+                                    let shiftIndex = (totalMonths + 3) % 4;
+                                    if (shiftIndex < 0) shiftIndex += 4; // 處理負數
+                                    const isNightShift = staffIdx === shiftIndex;
+
+                                    return (
+                                        <tr key={staffIdx} className="hover:bg-gray-50 transition-colors print:hover:bg-transparent">
+                                            <td className="sticky left-0 z-10 bg-white p-0 border-r border-b border-gray-300 font-medium text-gray-700 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] print:shadow-none">
+                                                {isCopyMode ? (
+                                                    <button
+                                                        className={`w-full h-12 px-2 text-base font-bold transition-all duration-200 flex items-center justify-center
+                                                            ${isCopySource ? 'bg-green-100 text-green-700 ring-inset ring-2 ring-green-500' : ''}
+                                                            ${isCopyDestination ? 'bg-blue-50 text-blue-600 hover:bg-blue-100 ring-inset ring-2 ring-blue-300' : 'hover:bg-gray-100'}
+                                                        `}
+                                                        onClick={() => handleRowClick(staffIdx)}
+                                                        title={isCopySource ? '取消選取' : (copiedRowData ? '點擊貼上整列資料' : '點擊複製整列資料')}
+                                                    >
+                                                        {isCopySource ? (
+                                                            <span className="flex items-center gap-1"><Icon name="CheckCircle2" size={14}/> 已複製</span>
+                                                        ) : (
+                                                            copiedRowData ? (
+                                                                <span className="flex items-center gap-1"><Icon name="ClipboardPaste" size={14}/> 貼上整列</span>
+                                                            ) : (
+                                                                <span className="flex items-center gap-1"><Icon name="Copy" size={14}/> 複製整列</span>
+                                                            )
+                                                        )}
+                                                    </button>
+                                                ) : (
+                                                    <div className="w-full h-12 flex items-center justify-center relative">
+                                                        <input 
+                                                            type="text" 
+                                                            // 修正: 放大字體 (text-lg)
+                                                            className="w-full h-full text-center border-none focus:ring-2 focus:ring-blue-500 bg-transparent text-gray-800 text-lg font-bold pr-8"
+                                                            value={staffName}
+                                                            onChange={(e) => handleStaffNameChange(staffIdx, e.target.value)}
+                                                            placeholder={`同仁 ${String.fromCharCode(65+staffIdx)}`}
+                                                        />
+                                                        {isNightShift && (
+                                                            <span className="absolute right-0.5 top-1/2 transform -translate-y-1/2 text-[10px] text-blue-600 bg-blue-50 px-0.5 rounded border border-blue-100 pointer-events-none">
+                                                                {/* 修正: 移除括號 */}
+                                                                晚班
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                )}
+                                            </td>
+                                            {daysInView.map(dateStr => {
+                                                const shift = getShift(dateStr, staffIdx);
+                                                const key = `${dateStr}_${staffIdx}`;
+                                                const isCellCopySource = copySourceKey === key;
+                                                const isCellCopyDestination = isCopyMode && copiedShiftValue !== null && !isCellCopySource;
+                                                
+                                                const isCycleEnd = getCycleForDate(dateStr)?.end === dateStr;
+                                                const seqError = checkSequenceError(dateStr, staffIdx, shift.value);
+                                                const isSpecialColor = ['H', 'R', 'O'].includes(shift.value);
+
+                                                return (
+                                                    <td 
+                                                        key={dateStr} 
+                                                        className={`p-0 border-b border-gray-300 border-r relative transition-all duration-100 ease-in-out
+                                                            ${isCycleEnd ? 'border-r-yellow-400 border-r-2' : ''}
+                                                            ${isCellCopySource ? 'ring-2 ring-green-500 ring-inset z-30' : ''}
+                                                            ${isCellCopyDestination ? 'cursor-copy hover:bg-green-50' : (isCopyMode && !copiedRowData ? 'cursor-pointer hover:bg-gray-100' : '')}
+                                                            ${isCopyDestination ? 'bg-blue-50' : ''} 
+                                                        `}
+                                                        onClick={() => handleCellClick(dateStr, staffIdx)}
+                                                    >
+                                                        <div className={`
+                                                            relative w-full h-12 flex items-center justify-center
+                                                            ${shift.tentative ? 'bg-blue-100 print:bg-gray-100' : ''}
+                                                            ${seqError ? 'bg-red-50 ring-inset ring-2 ring-red-300 print:ring-0' : ''}
+                                                        `}>
+                                                            <select
+                                                                className={`
+                                                                    w-full h-full text-center bg-transparent appearance-none focus:outline-none focus:bg-white font-medium
+                                                                    ${isSpecialColor ? 'text-red-600 font-bold' : 'text-gray-800'}
+                                                                    ${isCopyMode ? 'pointer-events-none' : 'cursor-pointer'}
+                                                                    print:appearance-none print:bg-transparent
+                                                                `}
+                                                                value={shift.value}
+                                                                onChange={(e) => handleShiftChange(dateStr, staffIdx, e.target.value)}
+                                                                disabled={isCopyMode}
+                                                            >
+                                                                {SHIFT_OPTIONS.map(opt => (
+                                                                    <option key={opt.value} value={opt.value}>{opt.value || ''}</option>
+                                                                ))}
+                                                            </select>
+                                                            
+                                                            {isCellCopyDestination && (
+                                                                <div className="absolute inset-0 flex items-center justify-center opacity-50 pointer-events-none">
+                                                                    <Icon name="ClipboardPaste" size={18} className="text-green-500" />
+                                                                </div>
+                                                            )}
+                                                            
+                                                            {shift.tentative && (
+                                                                <div className="absolute top-0.5 right-0.5 w-1.5 h-1.5 bg-blue-400 rounded-full pointer-events-none print:hidden"></div>
+                                                            )}
+                                                            
+                                                            {seqError && (
+                                                                <div className="absolute top-0 left-0 w-full text-[8px] bg-red-100 text-red-600 text-center pointer-events-none truncate px-0.5 print:hidden">
+                                                                    規則!
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    </td>
+                                                );
+                                            })}
+                                        </tr>
+                                    );
+                                })}
+                                
+                                <tr className="bg-slate-50 border-t-2 border-slate-200 print:border-t print:border-gray-300">
+                                    <td className="sticky left-0 z-10 bg-slate-50 print:bg-white p-2 border-r border-b border-gray-300 text-xs font-bold text-slate-600 text-center">
+                                        統計
                                     </td>
-                                    {allDates.map(({ dateString }) => {
-                                        const summary = dailySummaries[dateString];
-                                        const a = summary?.early || 0;
-                                        const b = summary?.late || 0;
-                                        const isValid = summary?.manpowerValid;
-                                        const isCycleEnd = CYCLE_END_DATES.includes(dateString);
+                                    {daysInView.map(dateStr => {
+                                        let a = 0, b = 0;
+                                        staffNames.forEach((_, i) => {
+                                            const s = getShift(dateStr, i).value;
+                                            if (s.startsWith('A')) a++;
+                                            if (s.startsWith('B')) b++;
+                                        });
+                                        const isValid = getValidationErrors(dateStr).length === 0;
+                                        const isCycleEnd = getCycleForDate(dateStr)?.end === dateStr;
 
                                         return (
-                                            <td 
-                                                key={dateString} 
-                                                className={`p-0.5 text-center w-10 h-10 bg-gray-200 border-b border-gray-300 text-[10px] ${isCycleEnd ? 'border-r-yellow-400 border-r-2' : ''}`}
-                                            >
+                                            <td key={dateStr} className={`text-center py-1 border-r border-b border-gray-300 text-[10px] ${isCycleEnd ? 'border-r-yellow-400 border-r-2' : ''}`}>
                                                 <div className={`flex flex-col gap-0.5 items-center ${isValid ? 'text-slate-500' : 'text-red-600 font-bold'}`}>
                                                     <span>早:{a}</span>
                                                     <span>晚:{b}</span>
@@ -774,143 +889,23 @@
                             </tbody>
                         </table>
                     </div>
-                );
-            }
-
-            /**
-             * 底部總結面板
-             */
-            const SummaryPanel = () => {
-                return (
-                    <div className="mt-8 p-4 bg-white rounded-lg shadow-xl print:hidden">
-                        <h3 className="text-lg font-bold mb-3 text-gray-700">總結與規則檢查</h3>
-                        
-                        {/* 模式切換與儲存 */}
-                        <div className="flex justify-between items-center mb-4 border-b pb-4">
-                            <div className="flex items-center space-x-4">
-                                <span className="font-semibold text-gray-600">排班模式:</span>
-                                <div className="flex items-center">
-                                    <label className="inline-flex items-center cursor-pointer">
-                                        <input
-                                            type="checkbox"
-                                            className="sr-only peer"
-                                            checked={isDraftMode}
-                                            onChange={() => setIsDraftMode(!isDraftMode)}
-                                        />
-                                        <div className="relative w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border after:border-gray-300 after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-blue-600"></div>
-                                        <span className={`ms-3 text-sm font-medium ${isDraftMode ? 'text-blue-600 font-bold' : 'text-gray-900'}`}>
-                                            {isDraftMode ? '預排模式 (淺藍底色)' : '正式模式'}
-                                        </span>
-                                    </label>
-                                </div>
-                            </div>
-
-                            <div className="flex items-center space-x-3">
-                                <button
-                                    className={`px-4 py-2 text-white font-bold rounded-lg transition duration-200 shadow-md 
-                                        ${(isDraftMode || isSaving || !isAuthReady) ? 'bg-gray-400 cursor-not-allowed' : 'bg-green-600 hover:bg-green-700'}
-                                    `}
-                                    onClick={() => saveSchedule(getCurrentData())}
-                                    disabled={isDraftMode || isSaving || !isAuthReady}
-                                >
-                                    {isSaving ? '儲存中...' : '儲存正式排班表'}
-                                </button>
-                                {saveMessage && (
-                                    <span className={`text-sm font-semibold ${saveMessage.includes('成功') ? 'text-green-600' : 'text-red-600'}`}>
-                                        {saveMessage}
-                                    </span>
-                                )}
-                            </div>
-                        </div>
-
-                        {/* 員工總結 */}
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-                            {WORKERS.map(worker => (
-                                <div key={worker} className="p-3 border rounded-lg shadow-sm bg-gray-50">
-                                    <p className="font-bold text-md text-gray-800 mb-1">{worker} 的總結 ({currentMonth} 月)</p>
-                                    <p className="text-sm text-gray-600">
-                                        當月總工時: <span className="font-mono text-blue-600 font-bold">{totalHoursSummary[worker].totalHours}</span> 小時
-                                    </p>
-                                    <p className="text-xs text-gray-500">
-                                        (早班: {totalHoursSummary[worker].earlyShifts} 次 / 晚班: {totalHoursSummary[worker].lateShifts} 次 / 休息: {totalHoursSummary[worker].restDays} 次)
-                                    </p>
-                                    <p className="text-sm text-gray-600 mt-1">
-                                        變形工時週期工時: <span className="font-mono text-indigo-600 font-bold">{totalHoursSummary[worker].cycleHours}</span> 小時
-                                    </p>
-                                    <p className="text-xs text-gray-500">
-                                        (從本週期開始日計算至本月底)
-                                    </p>
-                                </div>
-                            ))}
-                        </div>
-                        
-                        {/* 規則違規總結 */}
-                        <div className="mt-4 border-t pt-4">
-                            <h4 className="text-base font-bold mb-2 text-red-600">⚠ 規則違規一覽 (請檢查紅色標示)</h4>
-                            <ul className="text-sm text-gray-700 space-y-1">
-                                <li>
-                                    <span className="font-semibold">班別規則 (B06 隔天不能接非 A07/休息):</span>
-                                    {Object.keys(shiftRuleViolations).length > 0 ? (
-                                        <span className="ml-2 text-red-600 font-bold">
-                                            有 {Object.keys(shiftRuleViolations).length} 個日期有違規。
-                                        </span>
-                                    ) : (
-                                        <span className="ml-2 text-green-600">✔ 全部符合規則</span>
-                                    )}
-                                </li>
-                                <li>
-                                    <span className="font-semibold">人力規則 (假日/特殊日期人力):</span>
-                                    {Object.values(dailySummaries).some(s => !s.manpowerValid) ? (
-                                        <span className="ml-2 text-red-600 font-bold">
-                                            有日期的人力配置不符合要求 (請看總計列的 <span className="text-red-600">紅色字體</span>)。
-                                        </span>
-                                    ) : (
-                                        <span className="ml-2 text-green-600">✔ 全部符合要求</span>
-                                    )}
-                                </li>
-                            </ul>
-                        </div>
+                    
+                    <div className="mt-4 text-xs text-gray-500 space-y-1 print:hidden">
+                        <p>* 班別規則：B06隔天僅能排A07。</p>
+                        <p>* 人力規則：假日/國定假日需剛好 1早1晚；2/16 僅需 1早。</p>
+                        <p>* 標示說明：<span className="text-red-600">紅色字體</span>為 H/R/O，<span className="bg-blue-100 px-1 rounded">淺藍底色</span>為預排。</p>
+                        <p>* 週期標示：黃色粗線與底色標示四週變形工時的結算日 (如 1/18, 2/15...)。</p>
                     </div>
-                );
-            }
-
-            // 主渲染區塊
-            return (
-                <div className="p-4 md:p-8 max-w-7xl mx-auto">
-                    <div className="flex flex-wrap justify-between items-start mb-6 gap-4">
-                        <h1 className="text-3xl font-extrabold text-gray-900 print:text-xl print:font-bold print:block print:w-full">
-                            2026 線上排班系統
-                        </h1>
-                        <MonthSelector />
-                        <UserDisplay />
-                    </div>
-
-                    {auth === null || !isAuthReady ? (
-                        <div className="text-center p-10 bg-white rounded-lg shadow-md">
-                            <p className="text-lg text-gray-600">系統初始化中，請稍候...</p>
-                        </div>
-                    ) : (
-                        <>
-                            <ShiftTable />
-                            <SummaryPanel />
-                            
-                            <div className="mt-8 text-xs text-gray-500 space-y-1 print:hidden">
-                                <h4 className="font-semibold text-gray-700 mb-1">排班表標示說明：</h4>
-                                <p>* 班別規則：<span className="text-red-600 font-bold border border-red-500 px-1 rounded">紅色邊框</span> 標示該員工當天班別違反「B06隔天僅能排A07或休息」的規則。</p>
-                                <p>* 人力規則：總計列的 <span className="text-red-600 font-bold">紅色字體</span> 標示當天早/晚班人數不符合「假日/特殊日期人力」規則。</p>
-                                <p>* 人力警示：班別儲存格右上角 <span className="inline-block h-1.5 w-1.5 bg-red-500 rounded-full">紅色圓點</span> 標示當天的人力總數不符合要求。</p>
-                                <p>* 標示說明：<span className="text-red-600 font-bold">紅色字體</span> 為 H/R/O 休息類班別；<span className="bg-blue-100 px-1 rounded">淺藍底色</span> 為預排模式下與正式資料不同的班別。</p>
-                                <p>* 週期標示：<span className="border-r-yellow-400 border-r-2 px-1 rounded bg-yellow-100">黃色粗線與底色</span> 標示變形工時的結算日 (如 1/18, 2/15...)。</p>
-                                <p>* 今天標示：<span className="border-2 border-indigo-500 px-1 rounded">靛藍色粗線</span> 標示今天的日期。</p>
-                            </div>
-                        </>
-                    )}
                 </div>
             );
-        };
+        }
 
         const root = ReactDOM.createRoot(document.getElementById('root'));
-        root.render(<App />);
+        root.render(
+            <ErrorBoundary>
+                <ScheduleApp />
+            </ErrorBoundary>
+        );
     </script>
 </body>
 </html>
