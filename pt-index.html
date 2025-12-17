@@ -51,7 +51,7 @@
             deleteDoc,
             updateDoc
         };
-       console.log("Firebase Modules Loaded");
+
         window.dispatchEvent(new Event('firebase-ready'));
     </script>
 
@@ -84,10 +84,48 @@
         };
 
         const APP_ID = "pt-schedule-1ad44";
+        const COLLECTION_NAME = "pt_roster_2026"; 
+        const SETTINGS_DOC = "settings_2026";
 
         const DEFAULT_STAFF = ["王羿涵 (早班)", "謝昕穎 (晚班)", "陳怡杉 (假日班)"];
         
-    
+        // --- 錯誤邊界元件 (防止白畫面) ---
+        class ErrorBoundary extends Component {
+            constructor(props) {
+                super(props);
+                this.state = { hasError: false, error: null, errorInfo: null };
+            }
+
+            static getDerivedStateFromError(error) {
+                return { hasError: true };
+            }
+
+            componentDidCatch(error, errorInfo) {
+                this.setState({ error, errorInfo });
+                console.error("Uncaught error:", error, errorInfo);
+            }
+
+            render() {
+                if (this.state.hasError) {
+                    return (
+                        <div className="p-10 bg-red-50 text-red-900 border border-red-200 rounded m-10">
+                            <h1 className="text-2xl font-bold mb-4">系統發生錯誤</h1>
+                            <p className="mb-4">請截圖此畫面並提供給開發人員。</p>
+                            <pre className="bg-white p-4 rounded border border-red-200 overflow-auto text-xs">
+                                {this.state.error && this.state.error.toString()}
+                                <br />
+                                {this.state.errorInfo && this.state.errorInfo.componentStack}
+                            </pre>
+                        </div>
+                    );
+                }
+                return this.props.children;
+            }
+        }
+
+
+
+
 
         // 班別定義
         const SHIFTS = {
