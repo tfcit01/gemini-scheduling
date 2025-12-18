@@ -148,11 +148,9 @@
             if (!isOpen) return null;
 
             const [shiftId, setShiftId] = useState('');
-            // UI State: isLeave 來控制是否顯示請假選項，區分正常出勤與請假
             const [isLeave, setIsLeave] = useState(false);
             const [subName, setSubName] = useState('');
             const [isFullTimeSub, setIsFullTimeSub] = useState(false);
-            // UI State: 管理者專用標記
             const [markAsEmergency, setMarkAsEmergency] = useState(false);
 
             useEffect(() => {
@@ -161,11 +159,8 @@
                     const currentLeaveType = currentData?.leaveType || 'NONE';
                     
                     setShiftId(currentShift);
-                    // 只要不是 NONE 就是請假狀態
                     setIsLeave(currentLeaveType !== 'NONE');
-                    // 如果是 EMERGENCY，勾選標記
                     setMarkAsEmergency(currentLeaveType === 'EMERGENCY');
-                    
                     setSubName(currentData?.subName || '');
                     setIsFullTimeSub(currentData?.isFullTimeSub || false);
                 }
@@ -173,7 +168,6 @@
 
             const handleSave = () => {
                 let finalLeaveType = 'NONE';
-                
                 if (isLeave) {
                     finalLeaveType = markAsEmergency ? 'EMERGENCY' : 'PLANNED';
                 }
@@ -205,7 +199,6 @@
                         </div>
 
                         <div className="space-y-6 overflow-y-auto flex-1 pr-1">
-                            {/* 1. Shift Selection */}
                             <div>
                                 <label className="block text-sm font-semibold text-slate-700 mb-2">班別調整 (預設: {defaultShiftId ? SHIFTS[Object.keys(SHIFTS).find(k => SHIFTS[k].id === defaultShiftId)].label : '休'})</label>
                                 <div className="grid grid-cols-2 gap-3">
@@ -215,7 +208,6 @@
                                     >
                                         休假 / 無排班
                                     </button>
-                                    
                                     <button onClick={() => setShiftId('M')} className={`p-3 rounded-lg border-2 text-sm font-medium transition-all ${shiftId === 'M' ? 'border-yellow-500 bg-yellow-50 text-yellow-800' : 'border-slate-200 hover:border-yellow-200'}`}>
                                         早班 (09-15)
                                     </button>
@@ -228,7 +220,6 @@
                                 </div>
                             </div>
 
-                            {/* 2. Status Section */}
                             {!isDayOff && (
                                 <div className="fade-in">
                                     <label className="block text-sm font-semibold text-slate-700 mb-2">出勤狀態</label>
@@ -249,16 +240,13 @@
                                 </div>
                             )}
 
-                            {/* 3. Substitution Section (Only if Leave) */}
                             {!isDayOff && isLeave && (
                                 <div className="bg-orange-50 p-4 rounded-lg border border-orange-200 fade-in">
                                     <div className="flex items-center gap-2 mb-3 text-orange-800">
                                         <Icons.Users size={18} />
                                         <span className="font-bold text-sm">代班安排 (優先找兼職)</span>
                                     </div>
-                                    
                                     <div className="space-y-4">
-                                        {/* Option 1: Other PT */}
                                         <div className={`p-3 rounded border transition-all ${!isFullTimeSub ? 'bg-white border-orange-400 ring-1 ring-orange-200' : 'bg-transparent border-transparent opacity-50'}`}>
                                             <label className="flex items-center gap-2 cursor-pointer mb-2">
                                                 <input 
@@ -278,12 +266,10 @@
                                             >
                                                 <option value="">-- 選擇人員 --</option>
                                                 {staffNames.map((name, idx) => (
-                                                    idx !== staffIndex ? <option key={name} value={name}>{name}</option> : null
+                                                    idx !== staffIndex ? <option key={name} value={name}>{name.split(' ')[0]}</option> : null
                                                 ))}
                                             </select>
                                         </div>
-
-                                        {/* Option 2: Full Time */}
                                         <div className={`p-3 rounded border transition-all ${isFullTimeSub ? 'bg-white border-orange-400 ring-1 ring-orange-200' : 'bg-transparent border-transparent opacity-50'}`}>
                                             <label className="flex items-center gap-2 cursor-pointer mb-2">
                                                 <input 
@@ -293,14 +279,14 @@
                                                     onChange={() => { setIsFullTimeSub(true); setSubName(''); }}
                                                     className="text-orange-600 focus:ring-orange-500"
                                                 />
-                                                <span className="text-sm font-medium text-slate-800">無人可代，由正職代班</span>
+                                                <span className="text-sm font-medium text-slate-800">由正職代班</span>
                                             </label>
                                             <input 
                                                 type="text" 
                                                 value={isFullTimeSub ? subName : ''}
                                                 onChange={(e) => setSubName(e.target.value)}
                                                 disabled={!isFullTimeSub}
-                                                placeholder="輸入正職人員姓名 (如: 店長)"
+                                                placeholder="輸入人員姓名 (如: 店長)"
                                                 className="w-full p-2 border border-slate-200 rounded bg-slate-50 text-sm focus:ring-2 focus:ring-orange-400 outline-none"
                                             />
                                         </div>
@@ -308,7 +294,6 @@
                                 </div>
                             )}
 
-                            {/* 4. Manager Section: Emergency Leave */}
                             {!isDayOff && isLeave && (
                                 <div className="border-t border-slate-200 pt-4 mt-2">
                                     <label className="flex items-start gap-3 p-3 rounded-lg hover:bg-red-50 transition cursor-pointer group">
@@ -342,18 +327,11 @@
         const StatsDashboard = ({ data, staffNames, currentDate }) => {
             const stats = useMemo(() => {
                 if (!staffNames || !Array.isArray(staffNames) || staffNames.length === 0) return [];
-                
                 const res = staffNames.map(name => ({
-                    name,
-                    expectedDays: 0,
-                    actualDays: 0,
-                    leaveDays: 0,
-                    emergencyCount: 0,
-                    subCount: 0
+                    name, expectedDays: 0, actualDays: 0, leaveDays: 0, emergencyCount: 0, subCount: 0
                 }));
 
                 const startYear = new Date(currentDate.getFullYear(), 0, 1);
-                // 只計算到當前檢視月份的月底
                 const calcEnd = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0); 
                 const currentMonthIdx = currentDate.getMonth();
 
@@ -364,27 +342,21 @@
                     staffNames.forEach((_, staffIdx) => {
                         const key = `${dateStr}_${staffIdx}`;
                         const item = data && data[key];
-                        
                         let shiftId = item?.shiftId ?? getDefaultShift(dateStr, staffIdx);
                         let leaveType = item?.leaveType || 'NONE';
                         
                         if (shiftId) {
                             res[staffIdx].expectedDays += 1;
-                            if (leaveType === 'NONE') {
-                                res[staffIdx].actualDays += 1;
-                            } else {
+                            if (leaveType === 'NONE') res[staffIdx].actualDays += 1;
+                            else {
                                 res[staffIdx].leaveDays += 1;
-                                if (leaveType === 'EMERGENCY' && isCurrentMonth) {
-                                    res[staffIdx].emergencyCount += 1;
-                                }
+                                if (leaveType === 'EMERGENCY' && isCurrentMonth) res[staffIdx].emergencyCount += 1;
                             }
                         }
-
                         if (item && item.subName) {
-                            const subIndex = staffNames.indexOf(item.subName);
-                            if (subIndex !== -1 && res[subIndex]) {
-                                res[subIndex].subCount += 1;
-                            }
+                            const cleanSub = item.subName.split(' ')[0];
+                            const subIndex = staffNames.findIndex(n => n.startsWith(cleanSub));
+                            if (subIndex !== -1 && res[subIndex]) res[subIndex].subCount += 1;
                         }
                     });
                 }
@@ -398,11 +370,11 @@
                         const isHighEmergency = s.emergencyCount >= 2; 
 
                         return (
-                            <div key={idx} className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 relative overflow-hidden group hover:shadow-md transition">
+                            <div key={idx} className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 relative overflow-hidden hover:shadow-md transition">
                                 <div className={`absolute top-0 left-0 w-1 h-full ${['bg-yellow-400', 'bg-indigo-400', 'bg-rose-400'][idx % 3]}`}></div>
                                 <div className="flex justify-between items-start mb-3">
                                     <div>
-                                        <h4 className="font-bold text-lg text-slate-800">{s.name}</h4>
+                                        <h4 className="font-bold text-lg text-slate-800">{s.name.split(' ')[0]}</h4>
                                         <div className="text-xs text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded inline-block mt-1">
                                             {idx === 0 ? '早班' : idx === 1 ? '晚班' : '假日班'}
                                         </div>
@@ -412,10 +384,8 @@
                                         <div className={`text-xl font-bold ${parseFloat(leaveRate) > 10 ? 'text-red-500' : 'text-slate-700'}`}>{leaveRate}%</div>
                                     </div>
                                 </div>
-                                
                                 <div className="grid grid-cols-2 gap-y-3 gap-x-4 text-sm border-t border-slate-100 pt-3">
                                     <div>
-                                        {/* 修改為 實到 / 應到 */}
                                         <p className="text-slate-400 text-xs mb-0.5">實到 / 應到 (本年累計)</p>
                                         <p className="font-semibold text-slate-700">{s.actualDays} <span className="text-xs font-normal">天</span> / {s.expectedDays} <span className="text-xs font-normal">天</span></p>
                                     </div>
@@ -427,11 +397,7 @@
                                         <p className="text-slate-500 text-xs">本月臨時請假</p>
                                         <div className="flex items-center gap-2">
                                             <span className={`font-bold ${isHighEmergency ? 'text-red-600' : 'text-slate-700'}`}>{s.emergencyCount} 次</span>
-                                            {isHighEmergency && (
-                                                <span className="flex items-center gap-1 text-[10px] text-red-600 bg-red-100 px-1.5 py-0.5 rounded-full animate-pulse">
-                                                    <Icons.AlertCircle size={10} /> 頻率過高
-                                                </span>
-                                            )}
+                                            {isHighEmergency && <span className="text-[10px] text-red-600 bg-red-100 px-1.5 py-0.5 rounded-full animate-pulse">警示</span>}
                                         </div>
                                     </div>
                                 </div>
@@ -450,8 +416,6 @@
             const [scheduleData, setScheduleData] = useState({});
             const [staffNames, setStaffNames] = useState(DEFAULT_STAFF);
             const [isLoading, setIsLoading] = useState(true);
-
-            // UI State
             const [modalOpen, setModalOpen] = useState(false);
             const [editingCell, setEditingCell] = useState(null); 
 
@@ -463,11 +427,8 @@
                             await new Promise(r => setTimeout(r, 100));
                             attempts++;
                         }
-                        if(!window.firebaseModules) throw new Error("Firebase SDK Timeout");
-
                         const { initializeApp, getAuth, signInAnonymously, onAuthStateChanged, getFirestore, signInWithCustomToken } = window.firebaseModules;
-                        const config = FIREBASE_CONFIG;
-                        const app = initializeApp(config);
+                        const app = initializeApp(FIREBASE_CONFIG);
                         const auth = getAuth(app);
                         const db = getFirestore(app);
                         setFb({ auth, db });
@@ -482,11 +443,7 @@
                             setUser(u);
                             if(u) setIsLoading(false);
                         });
-
-                    } catch(e) {
-                        console.error("Firebase init error:", e);
-                        setIsLoading(false);
-                    }
+                    } catch(e) { console.error(e); setIsLoading(false); }
                 };
                 init();
             }, []);
@@ -495,26 +452,17 @@
                 if(!user || !fb) return;
                 const { collection, onSnapshot, doc } = window.firebaseModules;
                 const currentAppId = typeof __app_id !== 'undefined' ? __app_id : APP_ID;
-
-                const rosterPath = ['artifacts', currentAppId, 'public', 'data', COLLECTION_NAME];
-                const unsubRoster = onSnapshot(collection(fb.db, ...rosterPath), (snap) => {
-                    const d = {};
-                    snap.docs.forEach(doc => d[doc.id] = doc.data());
+                const unsubRoster = onSnapshot(collection(fb.db, 'artifacts', currentAppId, 'public', 'data', COLLECTION_NAME), (snap) => {
+                    const d = {}; snap.docs.forEach(doc => d[doc.id] = doc.data());
                     setScheduleData(d);
                 });
-
-                const settingsPath = ['artifacts', currentAppId, 'public', 'data', SETTINGS_DOC, 'staff_list'];
-                const unsubSettings = onSnapshot(doc(fb.db, ...settingsPath), (snap) => {
+                const unsubSettings = onSnapshot(doc(fb.db, 'artifacts', currentAppId, 'public', 'data', SETTINGS_DOC, 'staff_list'), (snap) => {
                     if(snap.exists()) {
                         const data = snap.data();
-                        if(data.names && Array.isArray(data.names)) setStaffNames(data.names);
+                        if(data.names) setStaffNames(data.names);
                     }
                 });
-
-                return () => {
-                    unsubRoster();
-                    unsubSettings();
-                };
+                return () => { unsubRoster(); unsubSettings(); };
             }, [user, fb]);
 
             const handleCellClick = (dateStr, staffIndex) => {
@@ -526,47 +474,14 @@
                 if(!user || !fb || !editingCell) return;
                 const { doc, setDoc, deleteDoc } = window.firebaseModules;
                 const currentAppId = typeof __app_id !== 'undefined' ? __app_id : APP_ID;
-
-                const docId = `${editingCell.dateStr}_${editingCell.staffIndex}`;
-                const ref = doc(fb.db, 'artifacts', currentAppId, 'public', 'data', COLLECTION_NAME, docId);
-
-                const payload = {
-                    ...data,
-                    date: editingCell.dateStr,
-                    staffIndex: editingCell.staffIndex,
-                    updatedAt: new Date().toISOString(),
-                    updatedBy: user.uid
-                };
-
+                const ref = doc(fb.db, 'artifacts', currentAppId, 'public', 'data', COLLECTION_NAME, `${editingCell.dateStr}_${editingCell.staffIndex}`);
+                const payload = { ...data, date: editingCell.dateStr, staffIndex: editingCell.staffIndex, updatedAt: new Date().toISOString() };
                 const defaultVal = getDefaultShift(editingCell.dateStr, editingCell.staffIndex);
-                // 如果資料與預設值相同，且無請假也無代班，則刪除資料以節省空間
-                const isRedundant = data.shiftId === defaultVal && data.leaveType === 'NONE' && !data.subName;
-
-                if (isRedundant) {
-                    await deleteDoc(ref);
-                } else {
-                    await setDoc(ref, payload, { merge: true });
-                }
+                if (data.shiftId === defaultVal && data.leaveType === 'NONE' && !data.subName) await deleteDoc(ref);
+                else await setDoc(ref, payload, { merge: true });
             };
 
-            const changeMonth = (delta) => {
-                setCurrentDate(prev => {
-                    const newDate = new Date(prev.getFullYear(), prev.getMonth() + delta, 1);
-                    return newDate;
-                });
-            };
-
-            const handleStaffNameEdit = async (idx, newName) => {
-                const newNames = [...staffNames];
-                newNames[idx] = newName;
-                setStaffNames(newNames); 
-
-                if(fb) {
-                    const { doc, setDoc } = window.firebaseModules;
-                    const currentAppId = typeof __app_id !== 'undefined' ? __app_id : APP_ID;
-                    await setDoc(doc(fb.db, 'artifacts', currentAppId, 'public', 'data', SETTINGS_DOC, 'staff_list'), { names: newNames }, { merge: true });
-                }
-            };
+            const changeMonth = (delta) => setCurrentDate(prev => new Date(prev.getFullYear(), prev.getMonth() + delta, 1));
 
             const daysInMonth = useMemo(() => {
                 const year = currentDate.getFullYear();
@@ -577,67 +492,40 @@
                 return days;
             }, [currentDate]);
 
-            if(isLoading) return (
-                <div className="h-screen flex flex-col items-center justify-center bg-slate-50">
-                    <div className="w-12 h-12 border-4 border-slate-900 border-t-transparent rounded-full animate-spin mb-4"></div>
-                    <p className="text-slate-500 font-medium">系統初始化中...</p>
-                </div>
-            );
+            if(isLoading) return <div className="h-screen flex items-center justify-center text-slate-500">初始化中...</div>;
 
             return (
-                <div className="min-h-screen p-6 w-full mx-auto print:p-0 print:bg-white">
-                    {/* Header */}
+                <div className="min-h-screen p-6 w-full mx-auto print:p-0">
                     <div className="flex flex-col md:flex-row justify-between items-center mb-6 bg-white p-4 rounded-xl shadow-sm border border-slate-200 print:hidden">
                         <div className="flex items-center gap-3">
-                            <div className="bg-slate-800 p-2.5 rounded-lg text-white shadow-lg">
-                                <Icons.CalendarDays size={24} />
-                            </div>
-                            <div>
-                                <h1 className="text-xl font-bold text-slate-800 tracking-tight">PT 人員排班管理系統</h1>
-                                <p className="text-xs text-slate-500">Firebase 連線正常 | 2026 年度版</p>
-                            </div>
+                            <div className="bg-slate-800 p-2.5 rounded-lg text-white"><Icons.CalendarDays size={24} /></div>
+                            <h1 className="text-xl font-bold text-slate-800">PT 人員排班管理系統</h1>
                         </div>
-
                         <div className="flex items-center gap-4 mt-4 md:mt-0">
                             <div className="flex items-center bg-slate-100 rounded-lg p-1">
-                                <button onClick={() => changeMonth(-1)} className="p-2 hover:bg-white rounded-md transition text-slate-600 shadow-sm hover:shadow"><Icons.ChevronLeft size={20}/></button>
-                                <span className="w-32 text-center font-bold text-lg text-slate-700 tabular-nums">
-                                    {currentDate.getMonth()+1}月 <span className="text-xs text-slate-400 font-normal">{currentDate.getFullYear()}</span>
-                                </span>
-                                <button onClick={() => changeMonth(1)} className="p-2 hover:bg-white rounded-md transition text-slate-600 shadow-sm hover:shadow"><Icons.ChevronRight size={20}/></button>
+                                <button onClick={() => changeMonth(-1)} className="p-2 hover:bg-white rounded-md transition"><Icons.ChevronLeft size={20}/></button>
+                                <span className="w-32 text-center font-bold text-slate-700">{currentDate.getMonth()+1}月 {currentDate.getFullYear()}</span>
+                                <button onClick={() => changeMonth(1)} className="p-2 hover:bg-white rounded-md transition"><Icons.ChevronRight size={20}/></button>
                             </div>
-                            
-                            <button onClick={() => window.print()} className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition shadow-sm text-sm font-medium">
-                                <Icons.Printer size={18} />
-                                列印
-                            </button>
+                            <button onClick={() => window.print()} className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-300 rounded-lg text-sm font-medium"><Icons.Printer size={18} />列印</button>
                         </div>
-                    </div>
-
-                    <div className="hidden print:block text-center mb-6">
-                        <h2 className="text-2xl font-bold text-slate-900">2026年 {currentDate.getMonth()+1}月份 兼職人員排班表</h2>
                     </div>
 
                     <StatsDashboard data={scheduleData} staffNames={staffNames} currentDate={currentDate} />
 
-                    {/* Schedule Table */}
-                    <div className="bg-white rounded-xl shadow-lg border border-slate-200 overflow-hidden print:shadow-none print:border print:rounded-none">
+                    <div className="bg-white rounded-xl shadow-lg border border-slate-200 overflow-hidden print:shadow-none print:border">
                         <div className="overflow-x-auto scrollbar-hide">
                             <table className="w-full min-w-[1200px] border-collapse text-sm">
                                 <thead>
                                     <tr className="bg-slate-50 border-b border-slate-200">
-                                        <th className="sticky left-0 z-20 bg-slate-50 p-2 min-w-[150px] text-left text-slate-500 font-semibold border-r border-slate-200 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] pl-4">
-                                            人員 / 日期
-                                        </th>
+                                        <th className="sticky left-0 z-20 bg-slate-50 p-2 min-w-[140px] text-left pl-4 font-semibold border-r shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">人員 / 日期</th>
                                         {daysInMonth.map(dateStr => {
                                             const d = new Date(dateStr);
-                                            const day = d.getDate();
-                                            const week = ['日','一','二','三','四','五','六'][d.getDay()];
                                             const isHol = isHoliday(dateStr);
                                             return (
-                                                <th key={dateStr} className={`p-2 min-w-[45px] text-center border-r border-slate-100 ${isHol ? 'bg-rose-50' : ''}`}>
-                                                    <div className={`font-bold ${isHol ? 'text-rose-600' : 'text-slate-700'}`}>{day}</div>
-                                                    <div className={`text-[10px] ${isHol ? 'text-rose-400' : 'text-slate-400'}`}>{week}</div>
+                                                <th key={dateStr} className={`p-2 min-w-[48px] text-center border-r border-slate-100 ${isHol ? 'bg-rose-50' : ''}`}>
+                                                    <div className={`font-bold ${isHol ? 'text-rose-600' : 'text-slate-700'}`}>{d.getDate()}</div>
+                                                    <div className={`text-[10px] ${isHol ? 'text-rose-400' : 'text-slate-400'}`}>{['日','一','二','三','四','五','六'][d.getDay()]}</div>
                                                 </th>
                                             );
                                         })}
@@ -645,68 +533,35 @@
                                 </thead>
                                 <tbody>
                                     {staffNames.map((staff, sIdx) => (
-                                        <tr key={sIdx} className="hover:bg-slate-50/50 transition group">
-                                            <td className="sticky left-0 z-10 bg-white group-hover:bg-slate-50 transition p-0 border-r border-b border-slate-200 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">
-                                                <div className="flex items-center h-14 relative pl-4">
-                                                    <Icons.Edit className="absolute right-2 text-slate-300 opacity-0 group-hover:opacity-100 w-3 h-3 pointer-events-none" />
-                                                    <input 
-                                                        type="text" 
-                                                        value={staff}
-                                                        onChange={(e) => handleStaffNameEdit(sIdx, e.target.value)}
-                                                        className="w-full h-full bg-transparent font-bold text-slate-700 text-sm focus:outline-none focus:text-blue-600 truncate pr-6"
-                                                    />
-                                                </div>
+                                        <tr key={sIdx} className="hover:bg-slate-50 group">
+                                            <td className="sticky left-0 z-10 bg-white group-hover:bg-slate-50 p-4 border-r border-b font-bold text-slate-700 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">
+                                                {staff.split(' ')[0]}
                                             </td>
                                             {daysInMonth.map(dateStr => {
                                                 const docId = `${dateStr}_${sIdx}`;
                                                 const cellData = scheduleData[docId] || {};
-                                                
                                                 let shiftId = cellData.shiftId !== undefined ? cellData.shiftId : getDefaultShift(dateStr, sIdx);
-                                                
                                                 const shift = shiftId ? Object.values(SHIFTS).find(s => s.id === shiftId) : null;
                                                 const isLeave = cellData.leaveType && cellData.leaveType !== 'NONE';
-                                                const isEmergency = cellData.leaveType === 'EMERGENCY';
-                                                const isHol = isHoliday(dateStr);
                                                 
                                                 return (
-                                                    <td 
-                                                        key={dateStr} 
-                                                        onClick={() => handleCellClick(dateStr, sIdx)}
-                                                        className={`
-                                                            border-b border-r border-slate-100 p-0.5 cursor-pointer relative h-14
-                                                            ${isHol ? 'bg-rose-50/20' : ''}
-                                                            hover:bg-slate-100 transition-colors
-                                                        `}
-                                                    >
+                                                    <td key={dateStr} onClick={() => handleCellClick(dateStr, sIdx)} className={`border-b border-r border-slate-100 p-0.5 cursor-pointer h-14 relative ${isHoliday(dateStr) ? 'bg-rose-50/20' : ''}`}>
                                                         {shift && (
-                                                            <div className={`
-                                                                w-full h-full rounded flex flex-col items-center justify-center text-xs
-                                                                ${shift.color}
-                                                                ${isLeave ? 'opacity-30 grayscale' : ''}
-                                                            `}>
+                                                            <div className={`w-full h-full rounded flex flex-col items-center justify-center text-xs ${shift.color} ${isLeave ? 'opacity-20 grayscale' : ''}`}>
                                                                 <span className="font-bold">{shift.label.slice(0, 1)}</span>
-                                                                <span className="text-[9px] scale-90">{shift.time.split('-')[0]}</span>
                                                             </div>
                                                         )}
-
-                                                        {/* Leave Marker */}
                                                         {isLeave && !cellData.subName && (
                                                             <div className="absolute inset-0 flex items-center justify-center z-10">
-                                                                <div className={`
-                                                                    px-1 py-0.5 rounded shadow-sm border bg-white/95 backdrop-blur
-                                                                    ${isEmergency ? 'border-red-300 text-red-600' : 'border-blue-300 text-blue-600'}
-                                                                `}>
-                                                                    <div className="font-bold text-[10px] leading-none whitespace-nowrap">
-                                                                        {isEmergency ? '臨請' : '請假'}
-                                                                    </div>
-                                                                </div>
+                                                                <span className={`text-[10px] font-bold px-1 rounded bg-white shadow-sm border ${cellData.leaveType === 'EMERGENCY' ? 'text-red-600 border-red-200' : 'text-blue-600 border-blue-200'}`}>
+                                                                    {cellData.leaveType === 'EMERGENCY' ? '臨請' : '請假'}
+                                                                </span>
                                                             </div>
                                                         )}
-
-                                                        {/* Sub Marker - Modified for Bigger Font */}
+                                                        {/* 代班顯示優化：微調縮小字體 text-[11px] 以呈現三個中文字 */}
                                                         {cellData.subName && (
-                                                            <div className="absolute inset-0 flex items-center justify-center z-20">
-                                                                <div className="bg-slate-800 text-white text-xs font-bold px-1.5 py-0.5 rounded shadow leading-tight text-center max-w-[95%] truncate">
+                                                            <div className="absolute inset-0 flex items-center justify-center z-20 px-0.5">
+                                                                <div className="bg-slate-800 text-white text-[11px] font-bold py-1 rounded shadow-sm w-full text-center leading-none tracking-tighter truncate px-0.5">
                                                                     {cellData.subName.split(' ')[0]}
                                                                 </div>
                                                             </div>
@@ -721,31 +576,21 @@
                         </div>
                     </div>
 
-                    <div className="mt-4 text-xs text-slate-500 space-y-1 print:hidden bg-slate-100 p-3 rounded-lg border border-slate-200">
-                        <div className="flex flex-wrap gap-4 mb-2">
-                            <div className="flex items-center gap-2"><span className="w-3 h-3 bg-yellow-100 border border-yellow-200 rounded"></span> 早班 (09:00-15:00)</div>
-                            <div className="flex items-center gap-2"><span className="w-3 h-3 bg-indigo-100 border border-indigo-200 rounded"></span> 晚班 (16:30-22:00)</div>
-                            <div className="flex items-center gap-2"><span className="w-3 h-3 bg-rose-100 border border-rose-200 rounded"></span> 假日班 (10:00-22:00)</div>
-                            <div className="flex items-center gap-2"><span className="w-3 h-3 bg-rose-50 rounded"></span> 紅底: 國定假日/週末</div>
+                    <div className="mt-6 p-4 bg-slate-100 rounded-xl border border-slate-200 text-xs text-slate-500 space-y-2 print:hidden">
+                        <div className="flex gap-4 mb-2">
+                            <span className="flex items-center gap-1"><span className="w-3 h-3 bg-yellow-100 border border-yellow-200 rounded"></span> 早班</span>
+                            <span className="flex items-center gap-1"><span className="w-3 h-3 bg-indigo-100 border border-indigo-200 rounded"></span> 晚班</span>
+                            <span className="flex items-center gap-1"><span className="w-3 h-3 bg-rose-100 border border-rose-200 rounded"></span> 假日班</span>
                         </div>
-                        <p className="flex items-center gap-1">
-                            <Icons.Edit size={12} />
-                            點擊儲存格可設定詳細出勤狀態（請假）與指定代班人員。
-                        </p>
-                        <p className="flex items-center gap-1 text-slate-600">
-                            <Icons.ShieldAlert size={12} className="text-red-500"/>
-                            系統會自動統計「臨時請假」頻率，若單月超過2次將顯示紅色警示。
-                        </p>
+                        <p className="flex items-center gap-1"><Icons.Edit size={14} /> 點擊儲存格可設定詳細出勤狀態（請假）與指定代班人員。</p>
+                        <p className="flex items-center gap-1 text-red-600 font-medium"><Icons.ShieldAlert size={14} /> 系統會自動統計「臨時請假」頻率，若單月超過2次將顯示紅色警示。</p>
                     </div>
 
                     {modalOpen && editingCell && (
                         <EditShiftModal 
-                            isOpen={modalOpen}
-                            onClose={() => setModalOpen(false)}
-                            dateStr={editingCell.dateStr}
-                            staffIndex={editingCell.staffIndex}
-                            staffNames={staffNames}
-                            currentData={scheduleData[`${editingCell.dateStr}_${editingCell.staffIndex}`]}
+                            isOpen={modalOpen} onClose={() => setModalOpen(false)}
+                            dateStr={editingCell.dateStr} staffIndex={editingCell.staffIndex}
+                            staffNames={staffNames} currentData={scheduleData[`${editingCell.dateStr}_${editingCell.staffIndex}`]}
                             defaultShiftId={getDefaultShift(editingCell.dateStr, editingCell.staffIndex)}
                             onSave={handleSaveShift}
                         />
