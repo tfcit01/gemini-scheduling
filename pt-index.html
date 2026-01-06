@@ -77,8 +77,8 @@
             X: (props) => <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 18 18"/></svg>,
             Edit: (props) => <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>,
             ShieldAlert: (props) => <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/></svg>,
-            Clock: (props) => <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>,
-            Lock: (props) => <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            Lock: (props) => <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>,
+            Clock: (props) => <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
         };
 
         // --- Configuration ---
@@ -105,6 +105,25 @@
             HOLIDAY: { id: 'H', label: '假日班', time: '10:00-22:00', color: 'bg-rose-100 text-rose-800 border-rose-200' }
         };
 
+        const LEAVE_TYPES = {
+            NONE: { id: 'NONE', label: '正常出勤' },
+            PLANNED: { id: 'PLANNED', label: '一般請假', color: 'text-blue-600 font-bold' },
+            EMERGENCY: { id: 'EMERGENCY', label: '臨時請假', color: 'text-red-600 font-bold animate-pulse' }
+        };
+
+        const HOLIDAYS_2026 = [
+            '2026-01-01', 
+            '2026-02-14', '2026-02-15', '2026-02-16', '2026-02-17', '2026-02-18', '2026-02-19', '2026-02-20', '2026-02-21', '2026-02-22',
+            '2026-02-27', '2026-02-28', '2026-03-01',
+            '2026-04-03', '2026-04-04', '2026-04-05', '2026-04-06',
+            '2026-05-01', '2026-05-02', '2026-05-03',
+            '2026-06-19', '2026-06-20', '2026-06-21',
+            '2026-09-25', '2026-09-26', '2026-09-27', '2026-09-28',
+            '2026-10-09', '2026-10-10', '2026-10-11',
+            '2026-10-24', '2026-10-25', '2026-10-26',
+            '2026-12-25', '2026-12-26', '2026-12-27'
+        ];
+
         const formatDate = (year, month, day) => {
             const m = String(month + 1).padStart(2, '0');
             const d = String(day).padStart(2, '0');
@@ -115,7 +134,6 @@
             const day = new Date(dateStr).getDay();
             return day === 0 || day === 6;
         };
-        const HOLIDAYS_2026 = ['2026-01-01', '2026-02-14', '2026-02-15', '2026-02-16', '2026-02-17', '2026-02-18', '2026-02-19', '2026-02-20', '2026-02-21', '2026-02-22','2026-02-27', '2026-02-28', '2026-03-01','2026-04-03', '2026-04-04', '2026-04-05', '2026-04-06','2026-05-01', '2026-05-02', '2026-05-03','2026-06-19', '2026-06-20', '2026-06-21','2026-09-25', '2026-09-26', '2026-09-27', '2026-09-28','2026-10-09', '2026-10-10', '2026-10-11','2026-10-24', '2026-10-25', '2026-10-26','2026-12-25', '2026-12-26', '2026-12-27'];
         const isHoliday = (dateStr) => HOLIDAYS_2026.includes(dateStr) || isWeekend(dateStr);
 
         const getDefaultShift = (dateStr, staffIndex) => {
@@ -128,6 +146,7 @@
 
         // --- Components ---
 
+        // 1. Modal: 排班設定
         const EditShiftModal = ({ isOpen, onClose, dateStr, staffIndex, currentData, staffNames, onSave, defaultShiftId }) => {
             if (!isOpen) return null;
 
@@ -136,6 +155,8 @@
             const [subName, setSubName] = useState('');
             const [isFullTimeSub, setIsFullTimeSub] = useState(false);
             const [markAsEmergency, setMarkAsEmergency] = useState(false);
+            
+            // New: Late states
             const [isLate, setIsLate] = useState(false);
             const [lateNote, setLateNote] = useState('');
             const [showPwdPrompt, setShowPwdPrompt] = useState(false);
@@ -145,6 +166,7 @@
                 if (isOpen) {
                     const currentShift = currentData?.shiftId ?? defaultShiftId;
                     const currentLeaveType = currentData?.leaveType || 'NONE';
+                    
                     setShiftId(currentShift);
                     setIsLeave(currentLeaveType !== 'NONE');
                     setMarkAsEmergency(currentLeaveType === 'EMERGENCY');
@@ -157,7 +179,10 @@
 
             const handleSave = () => {
                 let finalLeaveType = 'NONE';
-                if (isLeave) finalLeaveType = markAsEmergency ? 'EMERGENCY' : 'PLANNED';
+                if (isLeave) {
+                    finalLeaveType = markAsEmergency ? 'EMERGENCY' : 'PLANNED';
+                }
+
                 onSave({
                     shiftId,
                     leaveType: finalLeaveType,
@@ -184,43 +209,68 @@
                 }
             };
 
+            const isDayOff = shiftId === '';
             const dateObj = new Date(dateStr);
             const dateLabel = `${dateObj.getMonth()+1}/${dateObj.getDate()} (週${['日','一','二','三','四','五','六'][dateObj.getDay()]})`;
             
             return (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 modal-overlay backdrop-blur-sm fade-in p-4">
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 modal-overlay backdrop-blur-sm fade-in">
                     <div className="bg-white rounded-xl shadow-2xl w-full max-w-md p-6 transform transition-all scale-100 flex flex-col max-h-[90vh]">
-                        <div className="flex justify-between items-center mb-6 border-b pb-3">
+                        <div className="flex justify-between items-center mb-6 border-b pb-3 flex-shrink-0">
                             <div>
                                 <h3 className="text-xl font-bold text-slate-800">{staffNames[staffIndex]}</h3>
-                                <p className="text-sm text-slate-500">{dateLabel} 設定</p>
+                                <p className="text-sm text-slate-500 font-medium">{dateLabel} 排班設定</p>
                             </div>
-                            <button onClick={onClose} className="text-slate-400 hover:text-slate-600 transition"><Icons.X size={24} /></button>
+                            <button onClick={onClose} className="text-slate-400 hover:text-slate-600 transition">
+                                <Icons.X size={24} />
+                            </button>
                         </div>
 
-                        <div className="space-y-6 overflow-y-auto pr-1">
-                            {/* 班別調整 */}
+                        <div className="space-y-6 overflow-y-auto flex-1 pr-1">
+                            {/* Shift */}
                             <div>
-                                <label className="block text-sm font-semibold text-slate-700 mb-2">班別調整</label>
-                                <div className="grid grid-cols-2 gap-2">
-                                    <button onClick={() => {setShiftId(''); setIsLeave(false);}} className={`p-2 rounded-lg border-2 text-xs font-medium ${shiftId === '' ? 'border-slate-500 bg-slate-100' : 'border-slate-100'}`}>休假</button>
-                                    <button onClick={() => setShiftId('M')} className={`p-2 rounded-lg border-2 text-xs font-medium ${shiftId === 'M' ? 'border-yellow-500 bg-yellow-50' : 'border-slate-100'}`}>早班</button>
-                                    <button onClick={() => setShiftId('E')} className={`p-2 rounded-lg border-2 text-xs font-medium ${shiftId === 'E' ? 'border-indigo-500 bg-indigo-50' : 'border-slate-100'}`}>晚班</button>
-                                    <button onClick={() => setShiftId('H')} className={`p-2 rounded-lg border-2 text-xs font-medium ${shiftId === 'H' ? 'border-rose-500 bg-rose-50' : 'border-slate-100'}`}>假日班</button>
+                                <label className="block text-sm font-semibold text-slate-700 mb-2">班別調整 (預設: {defaultShiftId ? SHIFTS[Object.keys(SHIFTS).find(k => SHIFTS[k].id === defaultShiftId)].label : '休'})</label>
+                                <div className="grid grid-cols-2 gap-3">
+                                    <button 
+                                        onClick={() => { setShiftId(''); setIsLeave(false); }}
+                                        className={`p-3 rounded-lg border-2 text-sm font-medium transition-all ${shiftId === '' ? 'border-slate-500 bg-slate-100 text-slate-800' : 'border-slate-200 hover:border-slate-300'}`}
+                                    >
+                                        休假 / 無排班
+                                    </button>
+                                    <button onClick={() => setShiftId('M')} className={`p-3 rounded-lg border-2 text-sm font-medium transition-all ${shiftId === 'M' ? 'border-yellow-500 bg-yellow-50 text-yellow-800' : 'border-slate-200 hover:border-yellow-200'}`}>
+                                        早班 (09-15)
+                                    </button>
+                                    <button onClick={() => setShiftId('E')} className={`p-3 rounded-lg border-2 text-sm font-medium transition-all ${shiftId === 'E' ? 'border-indigo-500 bg-indigo-50 text-indigo-800' : 'border-slate-200 hover:border-indigo-200'}`}>
+                                        晚班 (16:30-22)
+                                    </button>
+                                    <button onClick={() => setShiftId('H')} className={`p-3 rounded-lg border-2 text-sm font-medium transition-all ${shiftId === 'H' ? 'border-rose-500 bg-rose-50 text-rose-800' : 'border-slate-200 hover:border-rose-200'}`}>
+                                        假日班 (10-22)
+                                    </button>
                                 </div>
                             </div>
 
-                            {/* 出勤與遲到 */}
-                            {shiftId && (
-                                <div className="space-y-4">
+                            {!isDayOff && (
+                                <div className="fade-in space-y-4">
+                                    {/* Status */}
                                     <div>
-                                        <label className="block text-sm font-semibold text-slate-700 mb-2">出勤狀況</label>
-                                        <div className="flex gap-2 p-1 bg-slate-100 rounded-lg">
-                                            <button onClick={() => setIsLeave(false)} className={`flex-1 py-1.5 rounded-md text-xs font-medium ${!isLeave ? 'bg-white shadow text-slate-800' : 'text-slate-500'}`}>正常出勤</button>
-                                            <button onClick={() => setIsLeave(true)} className={`flex-1 py-1.5 rounded-md text-xs font-medium ${isLeave ? 'bg-white shadow text-blue-600' : 'text-slate-500'}`}>請假</button>
+                                        <label className="block text-sm font-semibold text-slate-700 mb-2">出勤狀態</label>
+                                        <div className="flex gap-2 bg-slate-100 p-1 rounded-lg">
+                                            <button
+                                                onClick={() => setIsLeave(false)}
+                                                className={`flex-1 py-2 px-3 rounded-md text-sm font-medium transition-all ${!isLeave ? 'bg-white shadow text-slate-800 ring-1 ring-slate-200' : 'text-slate-500 hover:text-slate-700'}`}
+                                            >
+                                                正常出勤
+                                            </button>
+                                            <button
+                                                onClick={() => setIsLeave(true)}
+                                                className={`flex-1 py-2 px-3 rounded-md text-sm font-medium transition-all ${isLeave ? 'bg-white shadow text-blue-600 ring-1 ring-blue-200' : 'text-slate-500 hover:text-slate-700'}`}
+                                            >
+                                                請假
+                                            </button>
                                         </div>
                                     </div>
 
+                                    {/* Late Toggle */}
                                     {!isLeave && (
                                         <div className={`p-3 rounded-lg border transition-all ${isLate ? 'bg-amber-50 border-amber-200' : 'bg-slate-50 border-slate-100'}`}>
                                             <div className="flex items-center justify-between">
@@ -249,35 +299,88 @@
                                 </div>
                             )}
 
-                            {/* 代班安排 */}
-                            {shiftId && isLeave && (
-                                <div className="bg-orange-50 p-4 rounded-lg border border-orange-200 space-y-3">
-                                    <p className="text-xs font-bold text-orange-800 flex items-center gap-1"><Icons.Users size={14}/> 代班安排</p>
-                                    <select 
-                                        value={!isFullTimeSub ? subName : ''}
-                                        onChange={(e) => {setSubName(e.target.value); setIsFullTimeSub(false);}}
-                                        className="w-full p-2 border border-slate-200 rounded text-xs outline-none"
-                                    >
-                                        <option value="">-- 由其他 PT 代班 --</option>
-                                        {staffNames.map((name, idx) => idx !== staffIndex ? <option key={name} value={name}>{name.split(' ')[0]}</option> : null)}
-                                    </select>
-                                    <div className="flex items-center gap-2">
-                                        <input type="checkbox" checked={isFullTimeSub} onChange={(e) => {setIsFullTimeSub(e.target.checked); if(e.target.checked) setSubName('');}} className="rounded text-orange-600"/>
-                                        <span className="text-xs text-slate-600">由正職/其他人員代班</span>
+                            {!isDayOff && isLeave && (
+                                <div className="bg-orange-50 p-4 rounded-lg border border-orange-200 fade-in">
+                                    <div className="flex items-center gap-2 mb-3 text-orange-800">
+                                        <Icons.Users size={18} />
+                                        <span className="font-bold text-sm">代班安排 (優先找兼職)</span>
                                     </div>
-                                    {isFullTimeSub && <input type="text" value={subName} onChange={(e) => setSubName(e.target.value)} placeholder="代班人姓名" className="w-full p-2 border border-slate-200 rounded text-xs outline-none"/>}
+                                    <div className="space-y-4">
+                                        <div className={`p-3 rounded border transition-all ${!isFullTimeSub ? 'bg-white border-orange-400 ring-1 ring-orange-200' : 'bg-transparent border-transparent opacity-50'}`}>
+                                            <label className="flex items-center gap-2 cursor-pointer mb-2">
+                                                <input 
+                                                    type="radio" 
+                                                    name="subType"
+                                                    checked={!isFullTimeSub}
+                                                    onChange={() => { setIsFullTimeSub(false); setSubName(''); }}
+                                                    className="text-orange-600 focus:ring-orange-500"
+                                                />
+                                                <span className="text-sm font-medium text-slate-800">由其他 PT 代班</span>
+                                            </label>
+                                            <select 
+                                                value={!isFullTimeSub ? subName : ''}
+                                                onChange={(e) => setSubName(e.target.value)}
+                                                disabled={isFullTimeSub}
+                                                className="w-full p-2 border border-slate-200 rounded bg-slate-50 text-sm focus:ring-2 focus:ring-orange-400 outline-none"
+                                            >
+                                                <option value="">-- 選擇人員 --</option>
+                                                {staffNames.map((name, idx) => (
+                                                    idx !== staffIndex ? <option key={name} value={name}>{name.split(' ')[0]}</option> : null
+                                                ))}
+                                            </select>
+                                        </div>
+                                        <div className={`p-3 rounded border transition-all ${isFullTimeSub ? 'bg-white border-orange-400 ring-1 ring-orange-200' : 'bg-transparent border-transparent opacity-50'}`}>
+                                            <label className="flex items-center gap-2 cursor-pointer mb-2">
+                                                <input 
+                                                    type="radio" 
+                                                    name="subType"
+                                                    checked={isFullTimeSub}
+                                                    onChange={() => { setIsFullTimeSub(true); setSubName(''); }}
+                                                    className="text-orange-600 focus:ring-orange-500"
+                                                />
+                                                <span className="text-sm font-medium text-slate-800">由正職代班</span>
+                                            </label>
+                                            <input 
+                                                type="text" 
+                                                value={isFullTimeSub ? subName : ''}
+                                                onChange={(e) => setSubName(e.target.value)}
+                                                disabled={!isFullTimeSub}
+                                                placeholder="輸入人員姓名 (如: 店長)"
+                                                className="w-full p-2 border border-slate-200 rounded bg-slate-50 text-sm focus:ring-2 focus:ring-orange-400 outline-none"
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {!isDayOff && isLeave && (
+                                <div className="border-t border-slate-200 pt-4 mt-2">
+                                    <label className="flex items-start gap-3 p-3 rounded-lg hover:bg-red-50 transition cursor-pointer group">
+                                        <div className="relative flex items-center">
+                                            <input 
+                                                type="checkbox" 
+                                                checked={markAsEmergency}
+                                                onChange={(e) => setMarkAsEmergency(e.target.checked)}
+                                                className="w-5 h-5 text-red-600 border-slate-300 rounded focus:ring-red-500 mt-0.5"
+                                            />
+                                        </div>
+                                        <div>
+                                            <span className="block font-bold text-slate-700 group-hover:text-red-700">標記為「臨時請假」</span>
+                                            <span className="text-xs text-slate-500 group-hover:text-red-500">此選項僅供管理者註記，將列入異常統計</span>
+                                        </div>
+                                    </label>
                                 </div>
                             )}
                         </div>
 
-                        <div className="mt-6 flex justify-end gap-2 border-t pt-4">
-                            <button onClick={onClose} className="px-4 py-2 text-slate-500 text-sm">取消</button>
-                            <button onClick={handleSave} className="px-6 py-2 bg-slate-900 text-white rounded-lg text-sm font-bold shadow-lg">確認儲存</button>
+                        <div className="mt-6 flex justify-end gap-3 pt-3 border-t flex-shrink-0">
+                            <button onClick={onClose} className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg transition text-sm">取消</button>
+                            <button onClick={handleSave} className="px-6 py-2 bg-slate-900 text-white rounded-lg hover:bg-slate-800 shadow-lg transition text-sm font-medium">確認儲存</button>
                         </div>
 
-                        {/* 密碼驗證 */}
+                        {/* Password Prompt */}
                         {showPwdPrompt && (
-                            <div className="absolute inset-0 z-50 bg-white/95 flex items-center justify-center p-6 flex-col">
+                            <div className="absolute inset-0 z-50 bg-white/95 flex items-center justify-center p-6 flex-col rounded-xl">
                                 <Icons.Lock size={40} className="text-slate-400 mb-4" />
                                 <h4 className="font-bold text-slate-800 mb-2">管理者驗證</h4>
                                 <p className="text-xs text-slate-500 mb-6">請輸入管理密碼以標記遲到記錄</p>
@@ -290,8 +393,8 @@
                                     className="w-full max-w-[200px] p-3 border-2 border-slate-200 rounded-xl text-center text-lg tracking-widest outline-none focus:border-slate-900 transition-all"
                                 />
                                 <div className="flex gap-4 mt-8">
-                                    <button onClick={() => {setShowPwdPrompt(false); setPwdInput('');}} className="text-sm text-slate-500">取消</button>
-                                    <button onClick={verifyPwd} className="px-8 py-2 bg-slate-900 text-white rounded-lg text-sm font-bold">驗證</button>
+                                    <button onClick={() => {setShowPwdPrompt(false); setPwdInput('');}} className="text-sm text-slate-500 hover:text-slate-800">取消</button>
+                                    <button onClick={verifyPwd} className="px-8 py-2 bg-slate-900 text-white rounded-lg text-sm font-bold shadow-lg hover:bg-slate-800">驗證</button>
                                 </div>
                             </div>
                         )}
@@ -300,32 +403,45 @@
             );
         };
 
+        // 2. Stats Dashboard
         const StatsDashboard = ({ data, staffNames, currentDate }) => {
             const stats = useMemo(() => {
-                if (!staffNames.length) return [];
-                const res = staffNames.map(name => ({ name, expectedDays: 0, actualDays: 0, leaveDays: 0, emergencyCount: 0, subCount: 0, lateCount: 0 }));
-                const currentMonthIdx = currentDate.getMonth();
-                const startYear = new Date(currentDate.getFullYear(), 0, 1);
-                const endMonth = new Date(currentDate.getFullYear(), currentMonthIdx + 1, 0);
+                if (!staffNames || !Array.isArray(staffNames) || staffNames.length === 0) return [];
+                const res = staffNames.map(name => ({
+                    name, expectedDays: 0, actualDays: 0, leaveDays: 0, emergencyCount: 0, subCount: 0, lateCount: 0
+                }));
 
-                for (let d = new Date(startYear); d <= endMonth; d.setDate(d.getDate() + 1)) {
+                const startYear = new Date(currentDate.getFullYear(), 0, 1);
+                const calcEnd = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0); 
+                const currentMonthIdx = currentDate.getMonth();
+
+                for (let d = new Date(startYear); d <= calcEnd; d.setDate(d.getDate() + 1)) {
                     const dateStr = formatDate(d.getFullYear(), d.getMonth(), d.getDate());
-                    const isMonth = d.getMonth() === currentMonthIdx;
-                    staffNames.forEach((_, sIdx) => {
-                        const cell = data[`${dateStr}_${sIdx}`];
-                        let shiftId = cell?.shiftId ?? getDefaultShift(dateStr, sIdx);
+                    const isCurrentMonth = d.getMonth() === currentMonthIdx;
+
+                    staffNames.forEach((_, staffIdx) => {
+                        const key = `${dateStr}_${staffIdx}`;
+                        const item = data && data[key];
+                        let shiftId = item?.shiftId ?? getDefaultShift(dateStr, staffIdx);
+                        let leaveType = item?.leaveType || 'NONE';
+                        
                         if (shiftId) {
-                            res[sIdx].expectedDays++;
-                            if (cell?.leaveType === 'NONE' || !cell?.leaveType) res[sIdx].actualDays++;
-                            else {
-                                res[sIdx].leaveDays++;
-                                if (cell?.leaveType === 'EMERGENCY' && isMonth) res[sIdx].emergencyCount++;
+                            res[staffIdx].expectedDays += 1;
+                            if (leaveType === 'NONE') {
+                                res[staffIdx].actualDays += 1;
+                                // Count Late only for actual attendance
+                                if (isCurrentMonth && item?.isLate) {
+                                    res[staffIdx].lateCount += 1;
+                                }
+                            } else {
+                                res[staffIdx].leaveDays += 1;
+                                if (leaveType === 'EMERGENCY' && isCurrentMonth) res[staffIdx].emergencyCount += 1;
                             }
                         }
-                        if (isMonth && cell?.isLate) res[sIdx].lateCount++;
-                        if (cell?.subName) {
-                            const subIdx = staffNames.findIndex(n => n.startsWith(cell.subName.split(' ')[0]));
-                            if (subIdx !== -1) res[subIdx].subCount++;
+                        if (item && item.subName) {
+                            const cleanSub = item.subName.split(' ')[0];
+                            const subIndex = staffNames.findIndex(n => n.startsWith(cleanSub));
+                            if (subIndex !== -1 && res[subIndex]) res[subIndex].subCount += 1;
                         }
                     });
                 }
@@ -334,32 +450,59 @@
 
             return (
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 print:hidden">
-                    {stats.map((s, idx) => (
-                        <div key={idx} className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 relative overflow-hidden">
-                            <div className={`absolute top-0 left-0 w-1 h-full ${['bg-yellow-400', 'bg-indigo-400', 'bg-rose-400'][idx % 3]}`}></div>
-                            <div className="flex justify-between items-start mb-2">
-                                <h4 className="font-bold text-slate-800">{s.name.split(' ')[0]} <span className="text-[10px] font-normal text-slate-400 ml-1">PT</span></h4>
-                                <div className="text-right">
-                                    <p className="text-[10px] text-slate-400">本月遲到</p>
-                                    <p className={`text-lg font-black ${s.lateCount > 0 ? 'text-amber-600' : 'text-slate-300'}`}>{s.lateCount} <span className="text-[10px]">次</span></p>
+                    {stats.map((s, idx) => {
+                        const leaveRate = s.expectedDays > 0 ? ((s.leaveDays / s.expectedDays) * 100).toFixed(1) : 0;
+                        const isHighEmergency = s.emergencyCount >= 2; 
+
+                        return (
+                            <div key={idx} className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 relative overflow-hidden hover:shadow-md transition">
+                                <div className={`absolute top-0 left-0 w-1 h-full ${['bg-yellow-400', 'bg-indigo-400', 'bg-rose-400'][idx % 3]}`}></div>
+                                <div className="flex justify-between items-start mb-3">
+                                    <div>
+                                        <h4 className="font-bold text-lg text-slate-800">{s.name.split(' ')[0]}</h4>
+                                        <div className="text-xs text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded inline-block mt-1">
+                                            {idx === 0 ? '早班' : idx === 1 ? '晚班' : '假日班'}
+                                        </div>
+                                    </div>
+                                    <div className="text-right">
+                                        <div className="text-xs text-slate-400">請假率</div>
+                                        <div className={`text-xl font-bold ${parseFloat(leaveRate) > 10 ? 'text-red-500' : 'text-slate-700'}`}>{leaveRate}%</div>
+                                    </div>
+                                </div>
+                                
+                                {/* New Row for Late Count */}
+                                <div className="flex justify-end mb-2">
+                                     <div className="text-right">
+                                        <span className="text-[10px] text-slate-400 mr-1">本月遲到</span>
+                                        <span className={`font-bold ${s.lateCount > 0 ? 'text-amber-600' : 'text-slate-300'}`}>{s.lateCount}</span>
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-y-3 gap-x-4 text-sm border-t border-slate-100 pt-3">
+                                    <div>
+                                        <p className="text-slate-400 text-xs mb-0.5">實到 / 應到 (本年累計)</p>
+                                        <p className="font-semibold text-slate-700">{s.actualDays} <span className="text-xs font-normal">天</span> / {s.expectedDays} <span className="text-xs font-normal">天</span></p>
+                                    </div>
+                                    <div>
+                                        <p className="text-slate-400 text-xs mb-0.5">代班貢獻 (次數)</p>
+                                        <p className="font-bold text-emerald-600">+{s.subCount}</p>
+                                    </div>
+                                    <div className="col-span-2 flex items-center justify-between bg-slate-50 p-2 rounded">
+                                        <p className="text-slate-500 text-xs">本月臨時請假</p>
+                                        <div className="flex items-center gap-2">
+                                            <span className={`font-bold ${isHighEmergency ? 'text-red-600' : 'text-slate-700'}`}>{s.emergencyCount} 次</span>
+                                            {isHighEmergency && <span className="text-[10px] text-red-600 bg-red-100 px-1.5 py-0.5 rounded-full animate-pulse">警示</span>}
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
-                            <div className="grid grid-cols-2 gap-2 mt-4 text-[11px] pt-3 border-t">
-                                <div>
-                                    <p className="text-slate-400">實到/應到 (累計)</p>
-                                    <p className="font-bold">{s.actualDays}/{s.expectedDays} 天</p>
-                                </div>
-                                <div className="text-right">
-                                    <p className="text-slate-400">代班貢獻</p>
-                                    <p className="font-bold text-emerald-600">+{s.subCount} 次</p>
-                                </div>
-                            </div>
-                        </div>
-                    ))}
+                        );
+                    })}
                 </div>
             );
         };
 
+        // 3. Main App
         function App() {
             const [user, setUser] = useState(null);
             const [fb, setFb] = useState(null);
@@ -374,15 +517,26 @@
                 const init = async () => {
                     try {
                         let attempts = 0;
-                        while(!window.firebaseModules && attempts < 20) { await new Promise(r => setTimeout(r, 100)); attempts++; }
+                        while(!window.firebaseModules && attempts < 20) {
+                            await new Promise(r => setTimeout(r, 100));
+                            attempts++;
+                        }
                         const { initializeApp, getAuth, signInAnonymously, onAuthStateChanged, getFirestore, signInWithCustomToken } = window.firebaseModules;
                         const app = initializeApp(FIREBASE_CONFIG);
                         const auth = getAuth(app);
                         const db = getFirestore(app);
                         setFb({ auth, db });
-                        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) await signInWithCustomToken(auth, __initial_auth_token);
-                        else await signInAnonymously(auth);
-                        onAuthStateChanged(auth, (u) => { setUser(u); if(u) setIsLoading(false); });
+
+                        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                             await signInWithCustomToken(auth, __initial_auth_token);
+                        } else {
+                             await signInAnonymously(auth);
+                        }
+
+                        onAuthStateChanged(auth, (u) => {
+                            setUser(u);
+                            if(u) setIsLoading(false);
+                        });
                     } catch(e) { console.error(e); setIsLoading(false); }
                 };
                 init();
@@ -395,9 +549,20 @@
                 const unsubRoster = onSnapshot(collection(fb.db, 'artifacts', currentAppId, 'public', 'data', COLLECTION_NAME), (snap) => {
                     const d = {}; snap.docs.forEach(doc => d[doc.id] = doc.data());
                     setScheduleData(d);
-                }, (err) => console.error(err));
-                return () => unsubRoster();
+                });
+                const unsubSettings = onSnapshot(doc(fb.db, 'artifacts', currentAppId, 'public', 'data', SETTINGS_DOC, 'staff_list'), (snap) => {
+                    if(snap.exists()) {
+                        const data = snap.data();
+                        if(data.names) setStaffNames(data.names);
+                    }
+                });
+                return () => { unsubRoster(); unsubSettings(); };
             }, [user, fb]);
+
+            const handleCellClick = (dateStr, staffIndex) => {
+                setEditingCell({ dateStr, staffIndex });
+                setModalOpen(true);
+            };
 
             const handleSaveShift = async (data) => {
                 if(!user || !fb || !editingCell) return;
@@ -411,18 +576,20 @@
             };
 
             const changeMonth = (delta) => setCurrentDate(prev => new Date(prev.getFullYear(), prev.getMonth() + delta, 1));
+
             const daysInMonth = useMemo(() => {
                 const year = currentDate.getFullYear();
                 const month = currentDate.getMonth();
-                const count = new Date(year, month + 1, 0).getDate(); 
-                const d = []; for (let i = 1; i <= count; i++) d.push(formatDate(year, month, i));
-                return d;
+                const daysCount = new Date(year, month + 1, 0).getDate(); 
+                const days = [];
+                for (let i = 1; i <= daysCount; i++) days.push(formatDate(year, month, i));
+                return days;
             }, [currentDate]);
 
             if(isLoading) return <div className="h-screen flex items-center justify-center text-slate-500">初始化中...</div>;
 
             return (
-                <div className="min-h-screen p-4 md:p-6 w-full mx-auto print:p-0">
+                <div className="min-h-screen p-6 w-full mx-auto print:p-0">
                     <div className="flex flex-col md:flex-row justify-between items-center mb-6 bg-white p-4 rounded-xl shadow-sm border border-slate-200 print:hidden">
                         <div className="flex items-center gap-3">
                             <div className="bg-slate-800 p-2.5 rounded-lg text-white"><Icons.CalendarDays size={24} /></div>
@@ -434,7 +601,7 @@
                                 <span className="w-32 text-center font-bold text-slate-700">{currentDate.getMonth()+1}月 {currentDate.getFullYear()}</span>
                                 <button onClick={() => changeMonth(1)} className="p-2 hover:bg-white rounded-md transition"><Icons.ChevronRight size={20}/></button>
                             </div>
-                            <button onClick={() => window.print()} className="px-4 py-2 bg-white border border-slate-300 rounded-lg text-sm font-medium flex items-center gap-2"><Icons.Printer size={18} />列印</button>
+                            <button onClick={() => window.print()} className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-300 rounded-lg text-sm font-medium"><Icons.Printer size={18} />列印</button>
                         </div>
                     </div>
 
@@ -445,12 +612,12 @@
                             <table className="w-full min-w-[1200px] border-collapse text-sm">
                                 <thead>
                                     <tr className="bg-slate-50 border-b border-slate-200">
-                                        <th className="sticky left-0 z-20 bg-slate-50 p-2 min-w-[120px] text-left pl-4 font-semibold border-r">人員 / 日期</th>
+                                        <th className="sticky left-0 z-20 bg-slate-50 p-2 min-w-[140px] text-left pl-4 font-semibold border-r shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">人員 / 日期</th>
                                         {daysInMonth.map(dateStr => {
                                             const d = new Date(dateStr);
                                             const isHol = isHoliday(dateStr);
                                             return (
-                                                <th key={dateStr} className={`p-2 min-w-[42px] text-center border-r border-slate-100 ${isHol ? 'bg-rose-50' : ''}`}>
+                                                <th key={dateStr} className={`p-2 min-w-[48px] text-center border-r border-slate-100 ${isHol ? 'bg-rose-50' : ''}`}>
                                                     <div className={`font-bold ${isHol ? 'text-rose-600' : 'text-slate-700'}`}>{d.getDate()}</div>
                                                     <div className={`text-[10px] ${isHol ? 'text-rose-400' : 'text-slate-400'}`}>{['日','一','二','三','四','五','六'][d.getDay()]}</div>
                                                 </th>
@@ -460,33 +627,42 @@
                                 </thead>
                                 <tbody>
                                     {staffNames.map((staff, sIdx) => (
-                                        <tr key={sIdx} className="hover:bg-slate-50">
-                                            <td className="sticky left-0 z-10 bg-white p-4 border-r border-b font-bold text-slate-700 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">
+                                        <tr key={sIdx} className="hover:bg-slate-50 group">
+                                            <td className="sticky left-0 z-10 bg-white group-hover:bg-slate-50 p-4 border-r border-b font-bold text-slate-700 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">
                                                 {staff.split(' ')[0]}
                                             </td>
                                             {daysInMonth.map(dateStr => {
-                                                const cell = scheduleData[`${dateStr}_${sIdx}`] || {};
-                                                let shiftId = cell.shiftId ?? getDefaultShift(dateStr, sIdx);
-                                                const shift = shiftId ? SHIFTS[Object.keys(SHIFTS).find(k => SHIFTS[k].id === shiftId)] : null;
-                                                const isLeave = cell.leaveType && cell.leaveType !== 'NONE';
-
+                                                const docId = `${dateStr}_${sIdx}`;
+                                                const cellData = scheduleData[docId] || {};
+                                                let shiftId = cellData.shiftId !== undefined ? cellData.shiftId : getDefaultShift(dateStr, sIdx);
+                                                const shift = shiftId ? Object.values(SHIFTS).find(s => s.id === shiftId) : null;
+                                                const isLeave = cellData.leaveType && cellData.leaveType !== 'NONE';
+                                                
                                                 return (
-                                                    <td key={dateStr} onClick={() => { setEditingCell({ dateStr, staffIndex: sIdx }); setModalOpen(true); }} className={`border-b border-r border-slate-100 p-0.5 cursor-pointer h-14 relative ${isHoliday(dateStr) ? 'bg-rose-50/20' : ''}`}>
+                                                    <td key={dateStr} onClick={() => handleCellClick(dateStr, sIdx)} className={`border-b border-r border-slate-100 p-0.5 cursor-pointer h-14 relative ${isHoliday(dateStr) ? 'bg-rose-50/20' : ''}`}>
                                                         {shift && (
                                                             <div className={`w-full h-full rounded flex flex-col items-center justify-center text-xs ${shift.color} ${isLeave ? 'opacity-20 grayscale' : ''}`}>
-                                                                <span className="font-bold">{shift.label[0]}</span>
+                                                                <span className="font-bold">{shift.label.slice(0, 1)}</span>
                                                             </div>
                                                         )}
-                                                        {cell.isLate && !isLeave && (
-                                                            <div className="absolute top-0.5 left-0.5 bg-amber-500 text-white rounded-full w-3.5 h-3.5 flex items-center justify-center text-[9px] font-black z-30 shadow-sm" title={cell.lateNote || '遲到註記'}>!</div>
+                                                        {isLeave && !cellData.subName && (
+                                                            <div className="absolute inset-0 flex items-center justify-center z-10">
+                                                                <span className={`text-[10px] font-bold px-1 rounded bg-white shadow-sm border ${cellData.leaveType === 'EMERGENCY' ? 'text-red-600 border-red-200' : 'text-blue-600 border-blue-200'}`}>
+                                                                    {cellData.leaveType === 'EMERGENCY' ? '臨請' : '請假'}
+                                                                </span>
+                                                            </div>
                                                         )}
-                                                        {isLeave && !cell.subName && (
-                                                            <div className="absolute inset-0 flex items-center justify-center z-10"><span className={`text-[9px] font-bold px-1 rounded bg-white border ${cell.leaveType === 'EMERGENCY' ? 'text-red-500 border-red-200' : 'text-blue-500 border-blue-200'}`}>{cell.leaveType === 'EMERGENCY' ? '臨' : '請'}</span></div>
+                                                        
+                                                        {/* Late Marker (New) */}
+                                                        {cellData.isLate && !isLeave && (
+                                                            <div className="absolute top-0.5 left-0.5 bg-amber-500 text-white rounded-full w-3.5 h-3.5 flex items-center justify-center text-[9px] font-black z-30 shadow-sm" title={cellData.lateNote || '遲到'}>!</div>
                                                         )}
-                                                        {cell.subName && (
+
+                                                        {/* 代班顯示優化：微調縮小字體 text-[11px] 以呈現三個中文字 */}
+                                                        {cellData.subName && (
                                                             <div className="absolute inset-0 flex items-center justify-center z-20 px-0.5">
-                                                                <div className="bg-slate-800 text-white text-[11px] font-bold py-1 rounded w-full text-center leading-none tracking-tighter truncate px-0.5">
-                                                                    {cell.subName.split(' ')[0]}
+                                                                <div className="bg-slate-800 text-white text-[11px] font-bold py-1 rounded shadow-sm w-full text-center leading-none tracking-tighter truncate px-0.5">
+                                                                    {cellData.subName.split(' ')[0]}
                                                                 </div>
                                                             </div>
                                                         )}
@@ -500,13 +676,16 @@
                         </div>
                     </div>
 
-                    <div className="mt-6 p-4 bg-amber-50 rounded-xl border border-amber-200 text-xs text-amber-800 space-y-2 print:hidden">
-                        <div className="flex gap-4 mb-1">
-                            <span className="flex items-center gap-1 font-bold"><span className="w-3 h-3 bg-amber-500 rounded-full flex items-center justify-center text-white text-[8px]">!</span> 遲到標記</span>
-                            <span className="flex items-center gap-1"><span className="w-3 h-3 bg-slate-800 rounded"></span> 代班人員</span>
+                    <div className="mt-6 p-4 bg-slate-100 rounded-xl border border-slate-200 text-xs text-slate-500 space-y-2 print:hidden">
+                        <div className="flex gap-4 mb-2">
+                            <span className="flex items-center gap-1"><span className="w-3 h-3 bg-yellow-100 border border-yellow-200 rounded"></span> 早班</span>
+                            <span className="flex items-center gap-1"><span className="w-3 h-3 bg-indigo-100 border border-indigo-200 rounded"></span> 晚班</span>
+                            <span className="flex items-center gap-1"><span className="w-3 h-3 bg-rose-100 border border-rose-200 rounded"></span> 假日班</span>
+                            <span className="flex items-center gap-1 font-bold ml-2"><span className="w-3.5 h-3.5 bg-amber-500 rounded-full flex items-center justify-center text-white text-[8px]">!</span> 遲到標記</span>
                         </div>
-                        <p className="flex items-center gap-1"><Icons.Lock size={12} /> 「標記遲到」功能受管理密碼保護（密碼：8980），非管理者請勿更動。</p>
-                        <p className="flex items-center gap-1"><Icons.Edit size={12} /> 點擊排班格可快速切換請假、遲到與代班狀態。</p>
+                        <p className="flex items-center gap-1"><Icons.Edit size={14} /> 點擊儲存格可設定詳細出勤狀態（請假）與指定代班人員。</p>
+                        <p className="flex items-center gap-1 text-red-600 font-medium"><Icons.ShieldAlert size={14} /> 系統會自動統計「臨時請假」頻率，若單月超過2次將顯示紅色警示。</p>
+                        <p className="flex items-center gap-1 text-amber-600"><Icons.Lock size={12} /> 「標記遲到」功能需管理者密碼 (8980)。</p>
                     </div>
 
                     {modalOpen && editingCell && (
