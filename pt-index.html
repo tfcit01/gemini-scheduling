@@ -96,7 +96,7 @@
         const APP_ID = "pt-schedule-1ad44";
         const COLLECTION_NAME = "pt_roster_2026"; 
         const SETTINGS_DOC = "settings_2026_v2"; 
-        const SYSTEM_STATE_DOC = "system_state_2026";
+        const SYSTEM_STATE_DOC = "system_state_2026"; // 用於儲存系統全域鎖定狀態
         const ADMIN_PWD = "8980";
 
         const DEFAULT_STAFF = ["王羿涵 (早班)", "謝昕穎 (晚班)", "陳怡杉 (假日班)"];
@@ -215,7 +215,7 @@
             const dateObj = new Date(dateStr);
             const dateLabel = `${dateObj.getMonth()+1}/${dateObj.getDate()} (週${['日','一','二','三','四','五','六'][dateObj.getDay()]})`;
             
-            // 鎖定模式下的 UI 限制
+            // 鎖定模式下的 UI 限制 (除了遲到註記外，其餘功能停用)
             const isLockedUI = isSystemLocked;
 
             return (
@@ -232,15 +232,15 @@
                         </div>
 
                         {isLockedUI && (
-                            <div className="bg-slate-100 p-3 rounded mb-4 text-xs text-slate-600 flex items-center gap-2 border border-slate-200">
-                                <Icons.Lock size={14} className="text-slate-500" />
-                                系統目前為鎖定狀態，僅開放管理者標記遲到。
+                            <div className="bg-red-50 p-3 rounded mb-4 text-xs text-red-700 flex items-center gap-2 border border-red-200">
+                                <Icons.Lock size={14} className="text-red-500" />
+                                系統目前為「已鎖定」狀態，僅開放管理者標記遲到。
                             </div>
                         )}
 
                         <div className="space-y-6 overflow-y-auto flex-1 pr-1">
-                            {/* Shift */}
-                            <div className={isLockedUI ? "opacity-50 pointer-events-none" : ""}>
+                            {/* Shift - Locked if system locked */}
+                            <div className={isLockedUI ? "opacity-40 pointer-events-none filter grayscale" : ""}>
                                 <label className="block text-sm font-semibold text-slate-700 mb-2">班別調整 (預設: {defaultShiftId ? SHIFTS[Object.keys(SHIFTS).find(k => SHIFTS[k].id === defaultShiftId)].label : '休'})</label>
                                 <div className="grid grid-cols-2 gap-3">
                                     <button 
@@ -263,8 +263,8 @@
 
                             {!isDayOff && (
                                 <div className="fade-in space-y-4">
-                                    {/* Status */}
-                                    <div className={isLockedUI ? "opacity-50 pointer-events-none" : ""}>
+                                    {/* Status - Locked if system locked */}
+                                    <div className={isLockedUI ? "opacity-40 pointer-events-none filter grayscale" : ""}>
                                         <label className="block text-sm font-semibold text-slate-700 mb-2">出勤狀態</label>
                                         <div className="flex gap-2 bg-slate-100 p-1 rounded-lg">
                                             <button
@@ -282,7 +282,7 @@
                                         </div>
                                     </div>
 
-                                    {/* Late Toggle - Always Available if Shift Exists */}
+                                    {/* Late Toggle - Always Available, Independent of Lock */}
                                     {!isLeave && (
                                         <div className={`p-3 rounded-lg border transition-all ${isLate ? 'bg-amber-50 border-amber-200' : 'bg-slate-50 border-slate-100'}`}>
                                             <div className="flex items-center justify-between">
@@ -311,8 +311,9 @@
                                 </div>
                             )}
 
+                            {/* Sub - Locked if system locked */}
                             {!isDayOff && isLeave && (
-                                <div className={`bg-orange-50 p-4 rounded-lg border border-orange-200 fade-in ${isLockedUI ? "opacity-50 pointer-events-none" : ""}`}>
+                                <div className={`bg-orange-50 p-4 rounded-lg border border-orange-200 fade-in ${isLockedUI ? "opacity-40 pointer-events-none filter grayscale" : ""}`}>
                                     <div className="flex items-center gap-2 mb-3 text-orange-800">
                                         <Icons.Users size={18} />
                                         <span className="font-bold text-sm">代班安排 (優先找兼職)</span>
@@ -365,8 +366,9 @@
                                 </div>
                             )}
 
+                            {/* Emergency - Locked if system locked */}
                             {!isDayOff && isLeave && (
-                                <div className={`border-t border-slate-200 pt-4 mt-2 ${isLockedUI ? "opacity-50 pointer-events-none" : ""}`}>
+                                <div className={`border-t border-slate-200 pt-4 mt-2 ${isLockedUI ? "opacity-40 pointer-events-none filter grayscale" : ""}`}>
                                     <label className="flex items-start gap-3 p-3 rounded-lg hover:bg-red-50 transition cursor-pointer group">
                                         <div className="relative flex items-center">
                                             <input 
@@ -390,7 +392,7 @@
                             <button onClick={handleSave} className="px-6 py-2 bg-slate-900 text-white rounded-lg hover:bg-slate-800 shadow-lg transition text-sm font-medium">確認儲存</button>
                         </div>
 
-                        {/* Password Prompt */}
+                        {/* Password Prompt for Late Marking */}
                         {showPwdPrompt && (
                             <div className="absolute inset-0 z-50 bg-white/95 flex items-center justify-center p-6 flex-col rounded-xl">
                                 <Icons.Lock size={40} className="text-slate-400 mb-4" />
@@ -525,8 +527,8 @@
             const [modalOpen, setModalOpen] = useState(false);
             const [editingCell, setEditingCell] = useState(null); 
             
-            // System Lock State
-            const [isSystemLocked, setIsSystemLocked] = useState(true);
+            // System Lock State & Metadata
+            const [isSystemLocked, setIsSystemLocked] = useState(true); // 預設鎖定，等待 Firebase 同步
             const [clientIP, setClientIP] = useState('Checking...');
             const [lastUpdateTime, setLastUpdateTime] = useState('-');
             const [showUnlockPrompt, setShowUnlockPrompt] = useState(false);
@@ -560,7 +562,7 @@
                 };
                 init();
 
-                // Fetch IP
+                // Fetch IP (模擬功能，瀏覽器端無法直接取得真實 IP，需依賴外部服務)
                 fetch('https://api.ipify.org?format=json')
                     .then(res => res.json())
                     .then(data => setClientIP(data.ip))
@@ -572,6 +574,8 @@
                 if(!user || !fb) return;
                 const { collection, onSnapshot, doc } = window.firebaseModules;
                 const currentAppId = typeof __app_id !== 'undefined' ? __app_id : APP_ID;
+                
+                // 1. 監聽班表資料
                 const unsubRoster = onSnapshot(collection(fb.db, 'artifacts', currentAppId, 'public', 'data', COLLECTION_NAME), (snap) => {
                     const d = {}; 
                     let latest = null;
@@ -588,6 +592,8 @@
                         setLastUpdateTime(`${dt.getFullYear()}/${dt.getMonth()+1}/${dt.getDate()} ${dt.getHours().toString().padStart(2,'0')}:${dt.getMinutes().toString().padStart(2,'0')}`);
                     }
                 });
+
+                // 2. 監聽人員名單
                 const unsubSettings = onSnapshot(doc(fb.db, 'artifacts', currentAppId, 'public', 'data', SETTINGS_DOC, 'staff_list'), (snap) => {
                     if(snap.exists()) {
                         const data = snap.data();
@@ -595,11 +601,18 @@
                     }
                 });
                 
-                // Watch System Lock State (Sync across users if needed, or local)
-                // For simplicity here, we assume it's a local session state for "Admin Mode"
-                // But user requested "Lock/Unlock" logic. Let's make it local session unlock.
+                // 3. 監聽全域鎖定狀態 (System Lock State Sync)
+                const unsubLockState = onSnapshot(doc(fb.db, 'artifacts', currentAppId, 'public', 'data', SYSTEM_STATE_DOC), (snap) => {
+                    if(snap.exists()) {
+                        // 如果資料庫有狀態，同步到本地
+                        setIsSystemLocked(snap.data().isLocked);
+                    } else {
+                        // 初始狀態如果沒有，預設為鎖定並寫入資料庫
+                        setIsSystemLocked(true);
+                    }
+                });
                 
-                return () => { unsubRoster(); unsubSettings(); };
+                return () => { unsubRoster(); unsubSettings(); unsubLockState(); };
             }, [user, fb]);
 
             const handleCellClick = (dateStr, staffIndex) => {
@@ -612,15 +625,30 @@
                 const { doc, setDoc, deleteDoc } = window.firebaseModules;
                 const currentAppId = typeof __app_id !== 'undefined' ? __app_id : APP_ID;
                 const ref = doc(fb.db, 'artifacts', currentAppId, 'public', 'data', COLLECTION_NAME, `${editingCell.dateStr}_${editingCell.staffIndex}`);
-                const payload = { ...data, date: editingCell.dateStr, staffIndex: editingCell.staffIndex, updatedAt: new Date().toISOString(), updatedByIP: clientIP };
+                
+                // 寫入包含 IP 的更新資訊
+                const payload = { 
+                    ...data, 
+                    date: editingCell.dateStr, 
+                    staffIndex: editingCell.staffIndex, 
+                    updatedAt: new Date().toISOString(), 
+                    updatedByIP: clientIP 
+                };
+                
                 const defaultVal = getDefaultShift(editingCell.dateStr, editingCell.staffIndex);
                 if (data.shiftId === defaultVal && data.leaveType === 'NONE' && !data.subName && !data.isLate) await deleteDoc(ref);
                 else await setDoc(ref, payload, { merge: true });
             };
 
-            const handleUnlock = () => {
+            // 處理全域解鎖
+            const handleUnlock = async () => {
                 if (unlockPwd === ADMIN_PWD) {
-                    setIsSystemLocked(false);
+                    if(fb && user) {
+                        const { doc, setDoc } = window.firebaseModules;
+                        const currentAppId = typeof __app_id !== 'undefined' ? __app_id : APP_ID;
+                        // 更新資料庫為解鎖狀態
+                        await setDoc(doc(fb.db, 'artifacts', currentAppId, 'public', 'data', SYSTEM_STATE_DOC), { isLocked: false }, { merge: true });
+                    }
                     setShowUnlockPrompt(false);
                     setUnlockPwd('');
                 } else {
@@ -628,11 +656,17 @@
                 }
             };
 
-            const toggleLock = () => {
+            // 處理全域鎖定
+            const toggleLock = async () => {
+                const currentAppId = typeof __app_id !== 'undefined' ? __app_id : APP_ID;
+                const { doc, setDoc } = window.firebaseModules;
+
                 if (isSystemLocked) {
+                    // 目前是鎖定 -> 要解鎖 (需密碼)
                     setShowUnlockPrompt(true);
                 } else {
-                    setIsSystemLocked(true);
+                    // 目前是解鎖 -> 要鎖定 (直接鎖定)
+                    await setDoc(doc(fb.db, 'artifacts', currentAppId, 'public', 'data', SYSTEM_STATE_DOC), { isLocked: true }, { merge: true });
                 }
             };
 
@@ -656,22 +690,22 @@
                             <div className="bg-slate-800 p-3 rounded-xl text-white shadow-lg shadow-slate-200"><Icons.CalendarDays size={28} /></div>
                             <div>
                                 <h1 className="text-2xl font-bold text-slate-800 tracking-tight">PT 人員排班管理系統</h1>
-                                <div className="flex items-center gap-3 text-xs text-slate-500 mt-1">
-                                    <span className="bg-slate-100 px-2 py-0.5 rounded border border-slate-200">Ver: {lastUpdateTime}</span>
-                                    <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 bg-green-500 rounded-full"></span> IP: {clientIP}</span>
+                                <div className="flex flex-col md:flex-row md:items-center gap-1 md:gap-3 text-xs text-slate-500 mt-1">
+                                    <span className="bg-slate-100 px-2 py-0.5 rounded border border-slate-200">最後版本: {lastUpdateTime}</span>
+                                    <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 bg-green-500 rounded-full"></span> 您的 IP: {clientIP}</span>
                                 </div>
                             </div>
                         </div>
 
-                        {/* Lock/Unlock Button */}
+                        {/* Lock/Unlock Button - 全域同步 */}
                         <div className="absolute top-4 right-4 md:static md:ml-auto md:mr-6 flex flex-col items-end">
                             <button 
                                 onClick={toggleLock}
-                                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-sm ${isSystemLocked ? 'bg-slate-100 text-slate-600 hover:bg-slate-200' : 'bg-red-50 text-red-600 hover:bg-red-100 border border-red-200'}`}
+                                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-sm ${isSystemLocked ? 'bg-slate-100 text-slate-600 hover:bg-slate-200' : 'bg-red-50 text-red-600 hover:bg-red-100 border border-red-200 animate-pulse'}`}
                             >
-                                {isSystemLocked ? <><Icons.Lock size={14} /> 系統已鎖定</> : <><Icons.Unlock size={14} /> 管理模式 (可編輯)</>}
+                                {isSystemLocked ? <><Icons.Lock size={14} /> 系統已鎖定 (唯讀)</> : <><Icons.Unlock size={14} /> 編輯模式 (解鎖中)</>}
                             </button>
-                            {!isSystemLocked && <span className="text-[10px] text-red-400 mt-1">請記得重新鎖定</span>}
+                            {!isSystemLocked && <span className="text-[10px] text-red-400 mt-1 font-bold">請務必手動鎖定</span>}
                         </div>
 
                         <div className="flex items-center gap-4 mt-4 md:mt-0 border-l pl-6 border-slate-100">
@@ -764,7 +798,7 @@
                         </div>
                         <p className="flex items-center gap-1"><Icons.Edit size={14} /> 點擊儲存格可設定詳細出勤狀態（請假）與指定代班人員。</p>
                         <p className="flex items-center gap-1 text-red-600 font-medium"><Icons.ShieldAlert size={14} /> 系統會自動統計「臨時請假」頻率，若單月超過2次將顯示紅色警示。</p>
-                        <p className="flex items-center gap-1 text-amber-600"><Icons.Lock size={12} /> 「標記遲到」功能需管理者密碼。</p>
+                        <p className="flex items-center gap-1 text-amber-600"><Icons.Lock size={12} /> 「標記遲到」功能無需解鎖，僅需密碼驗證。</p>
                     </div>
 
                     {modalOpen && editingCell && (
