@@ -148,8 +148,10 @@
             
             // 遲到相關狀態
             const [isLate, setIsLate] = useState(currentData?.isLate || false);
+            const [lateNote, setLateNote] = useState(currentData?.lateNote || ''); // 遲到備註
             const [showPwdPrompt, setShowPwdPrompt] = useState(false);
             const [pwdInput, setPwdInput] = useState('');
+            const [noteInput, setNoteInput] = useState(''); // 驗證時的臨時備註輸入
 
             useEffect(() => {
                 if (isOpen) {
@@ -158,6 +160,7 @@
                     setSubName(currentData?.subName || '');
                     setIsFullTimeSub(currentData?.isFullTimeSub || false);
                     setIsLate(currentData?.isLate || false);
+                    setLateNote(currentData?.lateNote || '');
                 }
             }, [isOpen, currentData, defaultShiftId]);
 
@@ -167,20 +170,32 @@
                     leaveType,
                     subName: leaveType !== 'NONE' ? subName : '',
                     isFullTimeSub: leaveType !== 'NONE' ? isFullTimeSub : false,
-                    isLate // 儲存遲到狀態
+                    isLate, // 儲存遲到狀態
+                    lateNote // 儲存遲到備註
                 });
                 onClose();
             };
 
             const handleToggleLate = () => {
+                setNoteInput(''); // 開啟驗證視窗時清空輸入
                 setShowPwdPrompt(true);
             };
 
             const confirmLateToggle = () => {
                 if(pwdInput === ADMIN_PWD) {
-                    setIsLate(!isLate);
+                    const newLateState = !isLate;
+                    setIsLate(newLateState);
+                    
+                    // 如果是標記為遲到，則寫入備註；如果是取消遲到，則清空備註
+                    if (newLateState) {
+                        setLateNote(noteInput);
+                    } else {
+                        setLateNote('');
+                    }
+
                     setShowPwdPrompt(false);
                     setPwdInput('');
+                    setNoteInput('');
                 } else {
                     alert('密碼錯誤');
                 }
@@ -212,34 +227,66 @@
                             <div className="absolute inset-0 bg-white/95 z-50 flex flex-col items-center justify-center rounded-xl p-6 space-y-4 animate-fade-in">
                                 <Icons.Lock size={32} className="text-slate-400" />
                                 <h4 className="font-bold text-slate-700">管理者驗證</h4>
-                                <p className="text-sm text-slate-500">請輸入密碼以變更遲到狀態</p>
+                                <p className="text-sm text-slate-500 mb-2">
+                                    {isLate ? "請輸入密碼以取消遲到" : "請輸入密碼以標記遲到"}
+                                </p>
+                                
                                 <input 
                                     type="password" 
                                     value={pwdInput}
                                     onChange={(e) => setPwdInput(e.target.value)}
-                                    className="border border-slate-300 rounded px-3 py-2 text-center tracking-widest w-40 focus:ring-2 focus:ring-blue-500 outline-none"
+                                    placeholder="輸入密碼"
+                                    className="border border-slate-300 rounded px-3 py-2 text-center tracking-widest w-48 focus:ring-2 focus:ring-blue-500 outline-none mb-4"
                                     autoFocus
                                 />
-                                <div className="flex gap-2">
+
+                                {/* 只有在標記遲到(目前狀態為非遲到)時才顯示備註輸入框 */}
+                                {!isLate && (
+                                    <div className="w-full px-8 mb-2">
+                                        <label className="block text-xs text-slate-500 mb-1 text-left font-medium">遲到備註 (選填)</label>
+                                        <div className="relative">
+                                            <input 
+                                                type="text" 
+                                                value={noteInput}
+                                                onChange={(e) => setNoteInput(e.target.value)}
+                                                maxLength={25}
+                                                placeholder="EX: 9:30通報 / 10:30到班"
+                                                className="w-full border border-slate-300 rounded px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500 pr-10"
+                                            />
+                                            <div className={`absolute right-2 top-2 text-[10px] ${noteInput.length >= 25 ? 'text-red-500 font-bold' : 'text-slate-400'}`}>
+                                                {noteInput.length}/25
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                <div className="flex gap-2 mt-2">
                                     <button onClick={() => setShowPwdPrompt(false)} className="px-4 py-2 text-sm text-slate-500 hover:bg-slate-100 rounded">取消</button>
-                                    <button onClick={confirmLateToggle} className="px-4 py-2 text-sm bg-slate-800 text-white rounded hover:bg-slate-700">確認</button>
+                                    <button onClick={confirmLateToggle} className="px-6 py-2 text-sm bg-slate-800 text-white rounded hover:bg-slate-700 shadow-sm">確認變更</button>
                                 </div>
                             </div>
                         )}
 
                         <div className="space-y-6 overflow-y-auto pr-1">
                             {/* 遲到註記 (不受鎖定影響) */}
-                            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 flex justify-between items-center">
-                                <div className="flex items-center gap-2">
-                                    <Icons.Clock size={18} className="text-amber-600" />
-                                    <span className="font-bold text-sm text-amber-800">遲到註記</span>
+                            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+                                <div className="flex justify-between items-center">
+                                    <div className="flex items-center gap-2">
+                                        <Icons.Clock size={18} className="text-amber-600" />
+                                        <span className="font-bold text-sm text-amber-800">遲到註記</span>
+                                    </div>
+                                    <button 
+                                        onClick={handleToggleLate}
+                                        className={`px-3 py-1 text-xs font-bold rounded border transition-colors ${isLate ? 'bg-red-500 text-white border-red-600' : 'bg-white text-slate-500 border-slate-300 hover:bg-slate-50'}`}
+                                    >
+                                        {isLate ? '已標記遲到' : '標記遲到'}
+                                    </button>
                                 </div>
-                                <button 
-                                    onClick={handleToggleLate}
-                                    className={`px-3 py-1 text-xs font-bold rounded border transition-colors ${isLate ? 'bg-red-500 text-white border-red-600' : 'bg-white text-slate-500 border-slate-300 hover:bg-slate-50'}`}
-                                >
-                                    {isLate ? '已標記遲到' : '標記遲到'}
-                                </button>
+                                {isLate && lateNote && (
+                                    <div className="mt-2 text-xs text-amber-700 bg-amber-100/50 px-2 py-1.5 rounded border border-amber-200/50">
+                                        <span className="font-bold mr-1">備註:</span> {lateNote}
+                                    </div>
+                                )}
                             </div>
 
                             {/* 以下區塊受 editingDisabled 控制 */}
@@ -723,7 +770,7 @@
                                 <p className="text-sm font-bold text-slate-700">解除鎖定</p>
                                 <input 
                                     type="password" 
-                                    placeholder="輸入密碼 (8980)" 
+                                    placeholder="輸入密碼" 
                                     value={unlockInput}
                                     onChange={(e) => setUnlockInput(e.target.value)}
                                     className="border border-slate-300 rounded px-2 py-1 text-sm w-32 outline-none focus:border-blue-500"
@@ -832,7 +879,8 @@
                                                 const isEmergency = cellData.leaveType === 'EMERGENCY';
                                                 const isLate = cellData.isLate === true;
                                                 const isHol = isHoliday(dateStr);
-                                                
+                                                const lateNote = cellData.lateNote; // 取得資料中的遲到備註
+
                                                 return (
                                                     <td 
                                                         key={dateStr} 
@@ -842,6 +890,7 @@
                                                             ${shift ? '' : 'hover:bg-slate-100'}
                                                             ${isHol ? 'bg-rose-50/30' : ''}
                                                         `}
+                                                        title={isLate && lateNote ? `遲到備註: ${lateNote}` : ''}
                                                     >
                                                         {shift ? (
                                                             <div className={`
@@ -876,7 +925,7 @@
                                                         {/* Late Indicator */}
                                                         {isLate && (
                                                             <div className="absolute top-0 right-0 z-30">
-                                                                <div className="bg-red-500 text-white rounded-bl-lg rounded-tr-sm w-4 h-4 flex items-center justify-center shadow-sm">
+                                                                <div className={`bg-red-500 text-white rounded-bl-lg rounded-tr-sm ${lateNote ? 'w-auto px-1' : 'w-4'} h-4 flex items-center justify-center shadow-sm`}>
                                                                     <span className="text-[10px] font-bold">!</span>
                                                                 </div>
                                                             </div>
