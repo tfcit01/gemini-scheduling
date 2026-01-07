@@ -558,7 +558,8 @@
                 });
 
                 // 3. System Lock State (Sync)
-                const lockRef = doc(fb.db, 'artifacts', currentAppId, 'public', 'data', SYSTEM_STATE_DOC);
+                // 修正：加入 'main' 作為文件 ID，使路徑符合 Firestore 規定 (Collection/Doc/Collection/Doc...)
+                const lockRef = doc(fb.db, 'artifacts', currentAppId, 'public', 'data', SYSTEM_STATE_DOC, 'main');
                 const unsubLock = onSnapshot(lockRef, (snap) => {
                     if(snap.exists()) {
                         const data = snap.data();
@@ -619,7 +620,8 @@
                         const { doc, setDoc } = window.firebaseModules;
                         const currentAppId = typeof __app_id !== 'undefined' ? __app_id : APP_ID;
                         const nowStr = new Date().toLocaleString('zh-TW', { hour12: false });
-                        await setDoc(doc(fb.db, 'artifacts', currentAppId, 'public', 'data', SYSTEM_STATE_DOC), { 
+                        // 修正：加入 'main' 文件 ID
+                        await setDoc(doc(fb.db, 'artifacts', currentAppId, 'public', 'data', SYSTEM_STATE_DOC, 'main'), { 
                             locked: true,
                             lastUpdateTime: nowStr
                         }, { merge: true });
@@ -632,7 +634,8 @@
                     if(fb) {
                         const { doc, setDoc } = window.firebaseModules;
                         const currentAppId = typeof __app_id !== 'undefined' ? __app_id : APP_ID;
-                        await setDoc(doc(fb.db, 'artifacts', currentAppId, 'public', 'data', SYSTEM_STATE_DOC), { locked: false }, { merge: true });
+                        // 修正：加入 'main' 文件 ID
+                        await setDoc(doc(fb.db, 'artifacts', currentAppId, 'public', 'data', SYSTEM_STATE_DOC, 'main'), { locked: false }, { merge: true });
                     }
                     setShowUnlockPrompt(false);
                     setUnlockInput('');
