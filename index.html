@@ -60,7 +60,7 @@
 
     <!-- 主程式邏輯 -->
     <script type="text/babel">
-        const { useState, useEffect, useMemo, Component } = React;
+        const { useState, useEffect, useMemo, Component, useCallback } = React;
 
         // --- 修正: 內建 SVG 圖示 (解決 CDN 載入失敗出現 ? 的問題) ---
         const Icons = {
@@ -81,6 +81,9 @@
             ),
             CheckCircle2: ({size=18, className}) => (
                 <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>
+            ),
+            Undo: ({size=18, className}) => (
+                <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"/></svg>
             ),
             Info: ({size=18, className}) => (
                 <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
@@ -248,6 +251,9 @@
             const [copyEndKey, setCopyEndKey] = useState(null); // 範圍選取的結束 Key
             const [copiedRangeValues, setCopiedRangeValues] = useState(null); // 範圍複製的數值陣列
 
+            // Undo History State: Array of changes lists. Each item is [{dateStr, staffIndex, value: originalValue}]
+            const [history, setHistory] = useState([]);
+
             // 初始化 Firebase
             useEffect(() => {
                 const init = async () => {
@@ -379,6 +385,30 @@
                 window.print();
             };
 
+            // --- Undo Logic ---
+            const handleUndo = async () => {
+                if (history.length === 0) return;
+                
+                // Pop the last action
+                const lastAction = history[history.length - 1];
+                const newHistory = history.slice(0, -1);
+                setHistory(newHistory);
+                
+                console.log("Undoing action:", lastAction);
+                
+                // Restore values
+                const updates = lastAction.map(item => 
+                    handleShiftChange(item.dateStr, item.staffIndex, item.value)
+                );
+                
+                try {
+                    await Promise.all(updates);
+                } catch(e) {
+                    console.error("Undo failed:", e);
+                    alert("復原失敗: " + e.message);
+                }
+            };
+
             // --- Copy/Paste Logic ---
             const toggleCopyMode = () => {
                 setIsCopyMode(prev => !prev);
@@ -414,7 +444,7 @@
                 return dates;
             };
 
-            const handleCellClick = (dateStr, staffIndex, e) => {
+            const handleCellClick = async (dateStr, staffIndex, e) => {
                 if (!isCopyMode) return;
                 
                 // 清除整列複製的狀態
@@ -427,37 +457,33 @@
                 const currentKey = `${dateStr}_${staffIndex}`;
                 
                 // --- 狀態 A: 尚未選取任何來源 ---
-                // 行為: 選取當前格為來源 (無論是否為空值)
                 if (copiedShiftValue === null && copiedRangeValues === null) {
-                    setCopiedShiftValue(currentShift); // 允許設為空字串 ''
+                    setCopiedShiftValue(currentShift); 
                     setCopySourceKey(currentKey);
                     return;
                 }
 
                 // --- 狀態 B: 已有來源，判斷是「貼上」還是「延伸選取範圍」 ---
                 
-                // 1. 範圍選取邏輯 (按住 Shift 且在同一列)
+                // 1. 範圍選取邏輯
                 if (e.shiftKey && copySourceKey) {
                     const [sourceDate, sourceIndexStr] = copySourceKey.split('_');
                     const sourceIndex = parseInt(sourceIndexStr);
                     
                     if (sourceIndex === staffIndex) {
-                        // 確定選取範圍
                         setCopyEndKey(currentKey);
-                        
-                        // 計算範圍內的數值
                         const rangeDates = getDatesBetween(sourceDate, dateStr);
                         const values = rangeDates.map(d => getShift(d, staffIndex).value);
                         setCopiedRangeValues(values);
-                        
-                        // 清除單格複製顯示，轉為範圍模式
                         setCopiedShiftValue(null); 
                         return;
                     }
                 }
 
-                // 2. 貼上邏輯
-                
+                // 2. 貼上邏輯 (包含復原紀錄)
+                let updatesToApply = [];
+                let historyRecord = [];
+
                 // 如果是範圍貼上
                 if (copiedRangeValues) {
                     const targetDate = new Date(dateStr);
@@ -467,18 +493,15 @@
                         d.setDate(d.getDate() + i);
                         const dStr = formatDate(d);
                         
-                        // 避免不必要的寫入
                         const currentVal = getShift(dStr, staffIndex).value;
                         if (currentVal !== val) {
-                            handleShiftChange(dStr, staffIndex, val);
+                            updatesToApply.push({ dateStr: dStr, staffIndex, value: val });
+                            historyRecord.push({ dateStr: dStr, staffIndex, value: currentVal });
                         }
                     });
-                    return;
                 }
-                
                 // 如果是單格貼上
-                if (copiedShiftValue !== null) {
-                    // 如果點擊的是來源自己，則取消選取
+                else if (copiedShiftValue !== null) {
                     if (currentKey === copySourceKey) {
                         setCopiedShiftValue(null);
                         setCopySourceKey(null);
@@ -486,8 +509,15 @@
                     }
                     
                     if (currentShift !== copiedShiftValue) {
-                        handleShiftChange(dateStr, staffIndex, copiedShiftValue);
+                        updatesToApply.push({ dateStr, staffIndex, value: copiedShiftValue });
+                        historyRecord.push({ dateStr, staffIndex, value: currentShift });
                     }
+                }
+
+                // 執行更新並記錄歷史
+                if (updatesToApply.length > 0) {
+                    setHistory(prev => [...prev.slice(-19), historyRecord]); // Keep last 20 actions
+                    await Promise.all(updatesToApply.map(u => handleShiftChange(u.dateStr, u.staffIndex, u.value)));
                 }
             };
 
@@ -514,15 +544,23 @@
                         setCopySourceRowIndex(staffIndex);
                     }
                 } else {
-                    const updates = daysInView.map(dateStr => {
+                    // 執行整列貼上 (包含復原紀錄)
+                    let updatesToApply = [];
+                    let historyRecord = [];
+
+                    daysInView.forEach(dateStr => {
                         const val = copiedRowData[dateStr] || '';
                         const currentVal = getShift(dateStr, staffIndex).value;
                         if (val !== currentVal) {
-                            return handleShiftChange(dateStr, staffIndex, val);
+                            updatesToApply.push({ dateStr, staffIndex, value: val });
+                            historyRecord.push({ dateStr, staffIndex, value: currentVal });
                         }
-                        return Promise.resolve();
                     });
-                    await Promise.all(updates);
+
+                    if (updatesToApply.length > 0) {
+                        setHistory(prev => [...prev.slice(-19), historyRecord]); // Keep last 20 actions
+                        await Promise.all(updatesToApply.map(u => handleShiftChange(u.dateStr, u.staffIndex, u.value)));
+                    }
                 }
             };
 
@@ -709,24 +747,41 @@
                         <div className="flex items-center gap-4">
                             
                             <div className="flex flex-col items-end gap-1">
-                                <button 
-                                    onClick={toggleCopyMode} 
-                                    className={`flex items-center gap-2 px-4 py-2 rounded transition shadow-sm font-medium text-sm border
-                                        ${isCopyMode 
-                                            ? 'bg-green-600 text-white hover:bg-green-700 border-green-600' 
-                                            : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
-                                        }`}
-                                    title={isCopyMode ? '點擊退出複製模式' : '啟用後可點擊儲存格複製，或點擊同仁姓名複製整列'}
-                                >
-                                    {isCopyMode && (copiedShiftValue !== null || copiedRowData || copiedRangeValues) ? <Icon name="ClipboardPaste" size={18} /> : <Icon name="Copy" size={18} />}
-                                    {isCopyMode 
-                                        ? (copiedRangeValues 
-                                            ? `貼上範圍 (${copiedRangeValues.length}天)`
-                                            : (copiedShiftValue !== null
-                                                ? (copiedShiftValue === '' ? '貼上 (清除)' : `貼上 (${copiedShiftValue})`)
-                                                : (copiedRowData ? '貼上整列' : '請選擇來源 (Shift多選)')))
-                                        : '啟用快速複製'}
-                                </button>
+                                <div className="flex items-center gap-2">
+                                    <button 
+                                        onClick={toggleCopyMode} 
+                                        className={`flex items-center gap-2 px-4 py-2 rounded transition shadow-sm font-medium text-sm border
+                                            ${isCopyMode 
+                                                ? 'bg-green-600 text-white hover:bg-green-700 border-green-600' 
+                                                : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                                            }`}
+                                        title={isCopyMode ? '點擊退出複製模式' : '啟用後可點擊儲存格複製，或點擊同仁姓名複製整列'}
+                                    >
+                                        {isCopyMode && (copiedShiftValue !== null || copiedRowData || copiedRangeValues) ? <Icon name="ClipboardPaste" size={18} /> : <Icon name="Copy" size={18} />}
+                                        {isCopyMode 
+                                            ? (copiedRangeValues 
+                                                ? `貼上範圍 (${copiedRangeValues.length}天)`
+                                                : (copiedShiftValue !== null
+                                                    ? (copiedShiftValue === '' ? '貼上 (清除)' : `貼上 (${copiedShiftValue})`)
+                                                    : (copiedRowData ? '貼上整列' : '請選擇來源')))
+                                            : '啟用快速複製'}
+                                    </button>
+                                    
+                                    <button
+                                        onClick={handleUndo}
+                                        disabled={history.length === 0}
+                                        className={`flex items-center gap-2 px-3 py-2 rounded transition shadow-sm font-medium text-sm border
+                                            ${history.length > 0
+                                                ? 'bg-white text-orange-600 border-orange-200 hover:bg-orange-50 cursor-pointer'
+                                                : 'bg-gray-50 text-gray-300 border-gray-200 cursor-not-allowed'
+                                            }
+                                        `}
+                                        title={history.length > 0 ? "復原上一步貼上動作" : "無可復原動作"}
+                                    >
+                                        <Icon name="Undo" size={18} />
+                                        復原
+                                    </button>
+                                </div>
                                 {isCopyMode && !copiedRangeValues && !copiedRowData && copiedShiftValue === null && (
                                     <span className="text-[10px] text-gray-500">提示: 按住 Shift 點擊可選取範圍</span>
                                 )}
