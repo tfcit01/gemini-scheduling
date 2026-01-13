@@ -239,10 +239,14 @@
 
             // Copy/Paste States
             const [isCopyMode, setIsCopyMode] = useState(false);
-            const [copiedShiftValue, setCopiedShiftValue] = useState(null);
-            const [copySourceKey, setCopySourceKey] = useState(null);
-            const [copiedRowData, setCopiedRowData] = useState(null);
-            const [copySourceRowIndex, setCopySourceRowIndex] = useState(null);
+            const [copiedShiftValue, setCopiedShiftValue] = useState(null); // 單格複製的數值 (包含空白)
+            const [copySourceKey, setCopySourceKey] = useState(null); // 複製來源 (起始格) 的 Key
+            const [copiedRowData, setCopiedRowData] = useState(null); // 整列複製的資料
+            const [copySourceRowIndex, setCopySourceRowIndex] = useState(null); // 整列複製的來源 Row Index
+            
+            // Range Copy States
+            const [copyEndKey, setCopyEndKey] = useState(null); // 範圍選取的結束 Key
+            const [copiedRangeValues, setCopiedRangeValues] = useState(null); // 範圍複製的數值陣列
 
             // 初始化 Firebase
             useEffect(() => {
@@ -382,6 +386,8 @@
                 setCopySourceKey(null);
                 setCopiedRowData(null);
                 setCopySourceRowIndex(null);
+                setCopyEndKey(null);
+                setCopiedRangeValues(null);
             };
 
             const getShift = (dateStr, staffIndex) => {
@@ -389,9 +395,29 @@
                 return scheduleData[key] || { value: '', tentative: false };
             };
 
-            const handleCellClick = (dateStr, staffIndex) => {
+            // 取得兩個日期之間的所有日期 (包含開始與結束)
+            const getDatesBetween = (startStr, endStr) => {
+                const dates = [];
+                let curr = new Date(startStr);
+                const end = new Date(endStr);
+                
+                // 確保順序正確
+                if (curr > end) {
+                    curr = new Date(endStr);
+                    end.setTime(new Date(startStr).getTime());
+                }
+
+                while (curr <= end) {
+                    dates.push(formatDate(curr));
+                    curr.setDate(curr.getDate() + 1);
+                }
+                return dates;
+            };
+
+            const handleCellClick = (dateStr, staffIndex, e) => {
                 if (!isCopyMode) return;
                 
+                // 清除整列複製的狀態
                 if (copiedRowData) {
                     setCopiedRowData(null);
                     setCopySourceRowIndex(null);
@@ -399,28 +425,80 @@
                 
                 const currentShift = getShift(dateStr, staffIndex).value;
                 const currentKey = `${dateStr}_${staffIndex}`;
+                
+                // --- 狀態 A: 尚未選取任何來源 ---
+                // 行為: 選取當前格為來源 (無論是否為空值)
+                if (copiedShiftValue === null && copiedRangeValues === null) {
+                    setCopiedShiftValue(currentShift); // 允許設為空字串 ''
+                    setCopySourceKey(currentKey);
+                    return;
+                }
 
-                if (copiedShiftValue === null || currentKey === copySourceKey) {
-                    if (currentShift) {
-                        setCopiedShiftValue(currentShift);
-                        setCopySourceKey(currentKey);
-                    } else {
+                // --- 狀態 B: 已有來源，判斷是「貼上」還是「延伸選取範圍」 ---
+                
+                // 1. 範圍選取邏輯 (按住 Shift 且在同一列)
+                if (e.shiftKey && copySourceKey) {
+                    const [sourceDate, sourceIndexStr] = copySourceKey.split('_');
+                    const sourceIndex = parseInt(sourceIndexStr);
+                    
+                    if (sourceIndex === staffIndex) {
+                        // 確定選取範圍
+                        setCopyEndKey(currentKey);
+                        
+                        // 計算範圍內的數值
+                        const rangeDates = getDatesBetween(sourceDate, dateStr);
+                        const values = rangeDates.map(d => getShift(d, staffIndex).value);
+                        setCopiedRangeValues(values);
+                        
+                        // 清除單格複製顯示，轉為範圍模式
+                        setCopiedShiftValue(null); 
+                        return;
+                    }
+                }
+
+                // 2. 貼上邏輯
+                
+                // 如果是範圍貼上
+                if (copiedRangeValues) {
+                    const targetDate = new Date(dateStr);
+                    
+                    copiedRangeValues.forEach((val, i) => {
+                        const d = new Date(targetDate);
+                        d.setDate(d.getDate() + i);
+                        const dStr = formatDate(d);
+                        
+                        // 避免不必要的寫入
+                        const currentVal = getShift(dStr, staffIndex).value;
+                        if (currentVal !== val) {
+                            handleShiftChange(dStr, staffIndex, val);
+                        }
+                    });
+                    return;
+                }
+                
+                // 如果是單格貼上
+                if (copiedShiftValue !== null) {
+                    // 如果點擊的是來源自己，則取消選取
+                    if (currentKey === copySourceKey) {
                         setCopiedShiftValue(null);
                         setCopySourceKey(null);
+                        return;
                     }
-                } else {
-                    if (currentShift === copiedShiftValue) return;
-                    handleShiftChange(dateStr, staffIndex, copiedShiftValue);
+                    
+                    if (currentShift !== copiedShiftValue) {
+                        handleShiftChange(dateStr, staffIndex, copiedShiftValue);
+                    }
                 }
             };
 
             const handleRowClick = async (staffIndex) => {
                 if (!isCopyMode) return;
 
-                if (copiedShiftValue) {
-                    setCopiedShiftValue(null);
-                    setCopySourceKey(null);
-                }
+                // 清除其他模式狀態
+                setCopiedShiftValue(null);
+                setCopySourceKey(null);
+                setCopyEndKey(null);
+                setCopiedRangeValues(null);
 
                 if (copiedRowData === null || copySourceRowIndex === staffIndex) {
                     if (copySourceRowIndex === staffIndex) {
@@ -566,6 +644,21 @@
                 };
             };
             
+            // 判斷儲存格是否在選取範圍內 (用於 UI 標示)
+            const isCellInRange = (dateStr, staffIndex) => {
+                if (!copySourceKey || !copyEndKey) return false;
+                
+                const [sourceDate, sourceIndexStr] = copySourceKey.split('_');
+                const [endDate, endIndexStr] = copyEndKey.split('_');
+                
+                if (parseInt(sourceIndexStr) !== staffIndex) return false;
+                
+                const start = new Date(sourceDate) < new Date(endDate) ? sourceDate : endDate;
+                const end = new Date(sourceDate) < new Date(endDate) ? endDate : sourceDate;
+                
+                return dateStr >= start && dateStr <= end;
+            };
+
             if (loadingError) {
                 return (
                     <div className="flex items-center justify-center min-h-screen bg-red-50">
@@ -615,22 +708,29 @@
                         
                         <div className="flex items-center gap-4">
                             
-                            <button 
-                                onClick={toggleCopyMode} 
-                                className={`flex items-center gap-2 px-4 py-2 rounded transition shadow-sm font-medium text-sm border
-                                    ${isCopyMode 
-                                        ? 'bg-green-600 text-white hover:bg-green-700 border-green-600' 
-                                        : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
-                                    }`}
-                                title={isCopyMode ? '點擊退出複製模式' : '啟用後可點擊儲存格複製，或點擊同仁姓名複製整列'}
-                            >
-                                {copiedShiftValue || copiedRowData ? <Icon name="ClipboardPaste" size={18} /> : <Icon name="Copy" size={18} />}
-                                {isCopyMode 
-                                    ? (copiedShiftValue 
-                                        ? `貼上 (${copiedShiftValue})` 
-                                        : (copiedRowData ? '貼上整列' : '請選擇複製來源'))
-                                    : '啟用快速複製'}
-                            </button>
+                            <div className="flex flex-col items-end gap-1">
+                                <button 
+                                    onClick={toggleCopyMode} 
+                                    className={`flex items-center gap-2 px-4 py-2 rounded transition shadow-sm font-medium text-sm border
+                                        ${isCopyMode 
+                                            ? 'bg-green-600 text-white hover:bg-green-700 border-green-600' 
+                                            : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                                        }`}
+                                    title={isCopyMode ? '點擊退出複製模式' : '啟用後可點擊儲存格複製，或點擊同仁姓名複製整列'}
+                                >
+                                    {isCopyMode && (copiedShiftValue !== null || copiedRowData || copiedRangeValues) ? <Icon name="ClipboardPaste" size={18} /> : <Icon name="Copy" size={18} />}
+                                    {isCopyMode 
+                                        ? (copiedRangeValues 
+                                            ? `貼上範圍 (${copiedRangeValues.length}天)`
+                                            : (copiedShiftValue !== null
+                                                ? (copiedShiftValue === '' ? '貼上 (清除)' : `貼上 (${copiedShiftValue})`)
+                                                : (copiedRowData ? '貼上整列' : '請選擇來源 (Shift多選)')))
+                                        : '啟用快速複製'}
+                                </button>
+                                {isCopyMode && !copiedRangeValues && !copiedRowData && copiedShiftValue === null && (
+                                    <span className="text-[10px] text-gray-500">提示: 按住 Shift 點擊可選取範圍</span>
+                                )}
+                            </div>
                             
                             <label className={`flex items-center gap-2 px-3 py-2 rounded cursor-pointer transition select-none border ${isTentativeMode ? 'bg-blue-100 text-blue-700 border-blue-300 shadow-inner' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`}>
                                 <input 
@@ -801,7 +901,8 @@
                                                 const shift = getShift(dateStr, staffIdx);
                                                 const key = `${dateStr}_${staffIdx}`;
                                                 const isCellCopySource = copySourceKey === key;
-                                                const isCellCopyDestination = isCopyMode && copiedShiftValue !== null && !isCellCopySource;
+                                                const isCellCopyDestination = isCopyMode && (copiedShiftValue !== null || copiedRangeValues) && !isCellCopySource && !isCellInRange(dateStr, staffIdx);
+                                                const inRange = isCellInRange(dateStr, staffIdx);
                                                 
                                                 const isCycleEnd = getCycleForDate(dateStr)?.end === dateStr;
                                                 const seqError = checkSequenceError(dateStr, staffIdx, shift.value);
@@ -813,14 +914,15 @@
                                                         className={`p-0 border-b border-gray-300 border-r relative transition-all duration-100 ease-in-out
                                                             ${isCycleEnd ? 'border-r-yellow-400 border-r-2' : ''}
                                                             ${isCellCopySource ? 'ring-2 ring-green-500 ring-inset z-30' : ''}
+                                                            ${inRange ? 'bg-green-100 ring-1 ring-green-200 ring-inset' : ''}
                                                             ${isCellCopyDestination ? 'cursor-copy hover:bg-green-50' : (isCopyMode && !copiedRowData ? 'cursor-pointer hover:bg-gray-100' : '')}
                                                             ${isCopyDestination ? 'bg-blue-50' : ''} 
                                                         `}
-                                                        onClick={() => handleCellClick(dateStr, staffIdx)}
+                                                        onClick={(e) => handleCellClick(dateStr, staffIdx, e)}
                                                     >
                                                         <div className={`
                                                             relative w-full h-12 flex items-center justify-center
-                                                            ${shift.tentative ? 'bg-blue-100 print:bg-gray-100' : ''}
+                                                            ${shift.tentative && !inRange ? 'bg-blue-100 print:bg-gray-100' : ''}
                                                             ${seqError ? 'bg-red-50 ring-inset ring-2 ring-red-300 print:ring-0' : ''}
                                                         `}>
                                                             <select
@@ -895,6 +997,7 @@
                         <p>* 人力規則：假日/國定假日需剛好 1早1晚；2/16 僅需 1早。</p>
                         <p>* 標示說明：<span className="text-red-600">紅色字體</span>為 H/R/O，<span className="bg-blue-100 px-1 rounded">淺藍底色</span>為預排。</p>
                         <p>* 週期標示：黃色粗線與底色標示四週變形工時的結算日 (如 1/18, 2/15...)。</p>
+                        <p>* 複製功能提示：啟用快速複製後，<span className="font-bold text-green-700">點擊空白格可複製清除功能</span>；<span className="font-bold text-green-700">按住 Shift + 點擊</span>可選取連續範圍進行複製。</p>
                     </div>
                 </div>
             );
