@@ -37,7 +37,10 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, collection, doc, onSnapshot, setDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        
+import { getFirestore, collection, doc, onSnapshot, setDoc, deleteDoc, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+
 
         // 將 Firebase 函式掛載到 window 物件
         window.firebaseModules = {
@@ -51,7 +54,8 @@
             doc,
             onSnapshot,
             setDoc,
-            deleteDoc
+            deleteDoc,
+	    getDocs
         };
         
         console.log("Firebase Modules Loaded");
@@ -275,6 +279,10 @@
                         const app = initializeApp(YOUR_FIREBASE_CONFIG);
                         const auth = getAuth(app);
                         const db = getFirestore(app);
+			
+			// 這兩行可以使用瀏覽器F12直接貼上JavaScript查詢資料 
+			window.db = db;
+			window.auth = auth;
                         
                         setFb({ auth, db });
 
