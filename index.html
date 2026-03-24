@@ -233,10 +233,274 @@ import { getFirestore, collection, doc, onSnapshot, setDoc, deleteDoc, getDocs }
             return dates;
         }
 
+// 新增一個查詢頁 (React 畫面元件)
+function RosterChangeLogPage({ onBack }) {
+    const [rows, setRows] = React.useState([]);
+    const [loading, setLoading] = React.useState(false);
+    const [error, setError] = React.useState("");
+    const [year, setYear] = React.useState("2026");
+    const [selectedMonths, setSelectedMonths] = React.useState(["03", "04"]);
+    const [keyword, setKeyword] = React.useState("");
+    const [onlyTentative, setOnlyTentative] = React.useState(false);
+    const [sortOrder, setSortOrder] = React.useState("desc");
+    const [limitCount, setLimitCount] = React.useState("100");
+
+    const monthOptions = ["01","02","03","04","05","06","07","08","09","10","11","12"];
+
+    const parseDocId = (id) => {
+        // 例如 2026-03-15_2
+        const [datePart, slotPart] = id.split("_");
+        return {
+            date: datePart || "",
+            slot: slotPart || ""
+        };
+    };
+
+    const fetchChanges = async () => {
+        try {
+            setLoading(true);
+            setError("");
+
+            if (!window.db || !window.firebaseModules?.collection || !window.firebaseModules?.getDocs) {
+                throw new Error("Firestore 尚未初始化完成");
+            }
+
+            const { collection, getDocs } = window.firebaseModules;
+
+            const colRef = collection(
+                window.db,
+                "artifacts",
+                APP_ID,
+                "public",
+                "data",
+                "roster_2026"
+            );
+
+            const snapshot = await getDocs(colRef);
+            const allRows = [];
+
+            snapshot.forEach((d) => {
+                const id = d.id;
+                const data = d.data();
+
+                const matchedMonth = selectedMonths.some((m) => id.startsWith(`${year}-${m}-`));
+                if (!matchedMonth) return;
+
+                const { date, slot } = parseDocId(id);
+
+                allRows.push({
+                    id,
+                    date,
+                    slot,
+                    updatedAt: data.updatedAt || "",
+                    updatedBy: data.updatedBy || "",
+                    value: data.value || "",
+                    tentative: !!data.tentative
+                });
+            });
+
+            let filtered = allRows.filter((row) => {
+                const kw = keyword.trim().toLowerCase();
+                const hitKeyword = !kw ||
+                    row.id.toLowerCase().includes(kw) ||
+                    String(row.updatedBy).toLowerCase().includes(kw) ||
+                    String(row.value).toLowerCase().includes(kw) ||
+                    String(row.date).toLowerCase().includes(kw);
+
+                const hitTentative = !onlyTentative || row.tentative === true;
+
+                return hitKeyword && hitTentative;
+            });
+
+            filtered.sort((a, b) => {
+                const ta = a.updatedAt ? new Date(a.updatedAt).getTime() : 0;
+                const tb = b.updatedAt ? new Date(b.updatedAt).getTime() : 0;
+                return sortOrder === "desc" ? tb - ta : ta - tb;
+            });
+
+            const limitNum = parseInt(limitCount, 10) || 100;
+            setRows(filtered.slice(0, limitNum));
+        } catch (err) {
+            console.error(err);
+            setError(err.message || "查詢失敗");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const toggleMonth = (m) => {
+        setSelectedMonths((prev) =>
+            prev.includes(m) ? prev.filter((x) => x !== m) : [...prev, m].sort()
+        );
+    };
+
+    const exportCsv = () => {
+        const header = ["文件ID", "日期", "格位", "最後異動時間", "最後異動者", "班別值", "暫定"];
+        const lines = rows.map((r) => [
+            r.id,
+            r.date,
+            r.slot,
+            r.updatedAt,
+            r.updatedBy,
+            r.value,
+            r.tentative ? "是" : "否"
+        ]);
+
+        const csv = [header, ...lines]
+            .map((line) =>
+                line.map((v) => `"${String(v ?? "").replaceAll('"', '""')}"`).join(",")
+            )
+            .join("\n");
+
+        const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `roster_change_log_${year}_${selectedMonths.join("-")}.csv`;
+        a.click();
+        URL.revokeObjectURL(url);
+    };
+
+    React.useEffect(() => {
+        fetchChanges();
+    }, []);
+
+    return (
+        <div style={{ padding: "16px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px", gap: "12px", flexWrap: "wrap" }}>
+                <h2 style={{ margin: 0 }}>班表異動紀錄</h2>
+                <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                    <button onClick={onBack}>返回班表</button>
+                    <button onClick={fetchChanges}>重新查詢</button>
+                    <button onClick={exportCsv}>匯出 CSV</button>
+                </div>
+            </div>
+
+            <div style={{ border: "1px solid #ddd", padding: "12px", marginBottom: "16px", borderRadius: "8px" }}>
+                <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", alignItems: "center" }}>
+                    <label>
+                        年度：
+                        <input
+                            value={year}
+                            onChange={(e) => setYear(e.target.value)}
+                            style={{ marginLeft: "6px", width: "80px" }}
+                        />
+                    </label>
+
+                    <div>
+                        月份：
+                        {monthOptions.map((m) => (
+                            <label key={m} style={{ marginLeft: "8px" }}>
+                                <input
+                                    type="checkbox"
+                                    checked={selectedMonths.includes(m)}
+                                    onChange={() => toggleMonth(m)}
+                                />
+                                {parseInt(m, 10)}月
+                            </label>
+                        ))}
+                    </div>
+
+                    <label>
+                        關鍵字：
+                        <input
+                            value={keyword}
+                            onChange={(e) => setKeyword(e.target.value)}
+                            placeholder="搜尋 文件ID / 異動者 / 班別"
+                            style={{ marginLeft: "6px", width: "220px" }}
+                        />
+                    </label>
+
+                    <label>
+                        <input
+                            type="checkbox"
+                            checked={onlyTentative}
+                            onChange={(e) => setOnlyTentative(e.target.checked)}
+                        />
+                        僅顯示暫定
+                    </label>
+
+                    <label>
+                        排序：
+                        <select value={sortOrder} onChange={(e) => setSortOrder(e.target.value)} style={{ marginLeft: "6px" }}>
+                            <option value="desc">最新在前</option>
+                            <option value="asc">最舊在前</option>
+                        </select>
+                    </label>
+
+                    <label>
+                        顯示筆數：
+                        <select value={limitCount} onChange={(e) => setLimitCount(e.target.value)} style={{ marginLeft: "6px" }}>
+                            <option value="50">50</option>
+                            <option value="100">100</option>
+                            <option value="200">200</option>
+                            <option value="500">500</option>
+                        </select>
+                    </label>
+                </div>
+            </div>
+
+            {loading && <div>查詢中...</div>}
+            {error && <div style={{ color: "red", marginBottom: "12px" }}>錯誤：{error}</div>}
+
+            <div style={{ marginBottom: "8px" }}>目前顯示 {rows.length} 筆</div>
+
+            <div style={{ overflowX: "auto", border: "1px solid #ddd" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                    <thead>
+                        <tr>
+                            <th style={thStyle}>#</th>
+                            <th style={thStyle}>文件ID</th>
+                            <th style={thStyle}>日期</th>
+                            <th style={thStyle}>格位</th>
+                            <th style={thStyle}>最後異動時間</th>
+                            <th style={thStyle}>最後異動者</th>
+                            <th style={thStyle}>班別值</th>
+                            <th style={thStyle}>暫定</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {rows.map((row, idx) => (
+                            <tr key={row.id}>
+                                <td style={tdStyle}>{idx + 1}</td>
+                                <td style={tdStyle}>{row.id}</td>
+                                <td style={tdStyle}>{row.date}</td>
+                                <td style={tdStyle}>{row.slot}</td>
+                                <td style={tdStyle}>{row.updatedAt}</td>
+                                <td style={tdStyle}>{row.updatedBy}</td>
+                                <td style={tdStyle}>{row.value}</td>
+                                <td style={tdStyle}>{row.tentative ? "是" : "否"}</td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    );
+}
+
+const thStyle = {
+    borderBottom: "1px solid #ccc",
+    padding: "8px",
+    textAlign: "left",
+    background: "#f5f5f5",
+    whiteSpace: "nowrap"
+};
+
+const tdStyle = {
+    borderBottom: "1px solid #eee",
+    padding: "8px",
+    textAlign: "left",
+    verticalAlign: "top",
+    whiteSpace: "nowrap"
+};
+
+
         // --- 主程式元件 ---
         function ScheduleApp() {
             const [user, setUser] = useState(null);
             const [fb, setFb] = useState(null);
+	　const [page, setPage] = useState("roster");
             const [currentDate, setCurrentDate] = useState(new Date(2026, 0, 1));
             const [scheduleData, setScheduleData] = useState({});
             const [staffNames, setStaffNames] = useState(DEFAULT_STAFF_MEMBERS);
@@ -280,7 +544,7 @@ import { getFirestore, collection, doc, onSnapshot, setDoc, deleteDoc, getDocs }
                         const auth = getAuth(app);
                         const db = getFirestore(app);
 			
-			// 這兩行可以使用瀏覽器F12直接貼上JavaScript查詢資料 
+			// 這兩行可以把 db 掛到全域，使用瀏覽器F12直接貼上JavaScript查詢資料 
 			window.db = db;
 			window.auth = auth;
                         
@@ -735,6 +999,13 @@ import { getFirestore, collection, doc, onSnapshot, setDoc, deleteDoc, getDocs }
                 return <SvgIcon size={size} className={className} />;
             };
 
+		//加頁面切換
+		if (page === "changeLog") {
+      		  return <RosterChangeLogPage onBack={() => setPage("roster")} />;
+   		 }
+
+
+
             return (
                 <div className="min-h-screen bg-gray-50 text-gray-800 font-sans p-4 print:p-0 print:bg-white">
                     {/* Header: 改為 w-full 以與表格對齊 */}
@@ -806,8 +1077,11 @@ import { getFirestore, collection, doc, onSnapshot, setDoc, deleteDoc, getDocs }
                             </label>
                             
                             <button onClick={handlePrint} className="flex items-center gap-2 px-4 py-2 bg-slate-800 text-white rounded hover:bg-slate-700 transition shadow-sm">
-                                <Icon name="FileDown" size={18} /> 輸出 PDF / 列印
+                                <Icon name="FileDown" size={18} />輸出 PDF / 列印
                             </button>
+				<button onClick={() => setPage("changeLog")}
+    				className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition shadow-sm">
+				    <Icon name="Clock" size={18} />班表異動紀錄</button>
                         </div>
                     </div>
 
