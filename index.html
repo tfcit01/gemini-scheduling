@@ -237,10 +237,10 @@ import { getFirestore, collection, doc, onSnapshot, setDoc, deleteDoc, getDocs }
 function RosterChangeLogPage({ onBack }) {
     const [rows, setRows] = React.useState([]);
     const userMap = {
-        "abc123": "蔡定緯",
-        "def456": "林家傑",
-        "ghi789": "邱奕瑋",
-        "xyz999": "陶楷頤"
+        "2Z9ie27wA2OnGwi71AN95se7ydg2": "蔡定緯",
+        "i4kFNyEvQTcM8ka7TaZMccXGYLr2": "林家傑",
+        "Us08S1w1VJWVUdufNEOgN6vJ7wH3": "邱奕瑋",
+        "6VAi0gaULueVpkRjhwS3Xr3WXiF2": "陶楷頤"
     };
     const [loading, setLoading] = React.useState(false);
     const [error, setError] = React.useState("");
@@ -486,7 +486,9 @@ function RosterChangeLogPage({ onBack }) {
       })
     : "-"}
 </td>
-<td style={tdStyle}>{row.updatedBy}</td>
+<td style={tdStyle} title={row.updatedBy}>
+  {userMap[row.updatedBy] || "未知使用者"}
+</td>
                                 <td style={tdStyle}>{row.value}</td>
                                 <td style={tdStyle}>{row.tentative ? "是" : "否"}</td>
                             </tr>
