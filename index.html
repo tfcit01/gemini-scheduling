@@ -236,6 +236,12 @@ import { getFirestore, collection, doc, onSnapshot, setDoc, deleteDoc, getDocs }
 // 新增一個查詢頁 (React 畫面元件)
 function RosterChangeLogPage({ onBack }) {
     const [rows, setRows] = React.useState([]);
+    const userMap = {
+        "abc123": "蔡定緯",
+        "def456": "林家傑",
+        "ghi789": "邱奕瑋",
+        "xyz999": "陶楷頤"
+    };
     const [loading, setLoading] = React.useState(false);
     const [error, setError] = React.useState("");
     const [year, setYear] = React.useState("2026");
@@ -480,9 +486,7 @@ function RosterChangeLogPage({ onBack }) {
       })
     : "-"}
 </td>
-<td style={tdStyle} title={row.updatedBy}>
-  {userMap[row.updatedBy] || "未知使用者"}
-</td>
+<td style={tdStyle}>{row.updatedBy}</td>
                                 <td style={tdStyle}>{row.value}</td>
                                 <td style={tdStyle}>{row.tentative ? "是" : "否"}</td>
                             </tr>
