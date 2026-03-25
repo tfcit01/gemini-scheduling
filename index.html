@@ -466,8 +466,23 @@ function RosterChangeLogPage({ onBack }) {
                                 <td style={tdStyle}>{row.id}</td>
                                 <td style={tdStyle}>{row.date}</td>
                                 <td style={tdStyle}>{row.slot}</td>
-                                <td style={tdStyle}>{row.updatedAt}</td>
-                                <td style={tdStyle}>{row.updatedBy}</td>
+<td style={tdStyle}>
+  {row.updatedAt
+    ? new Date(row.updatedAt).toLocaleString("zh-TW", {
+        timeZone: "Asia/Taipei",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hour12: false
+      })
+    : "-"}
+</td>
+<td style={tdStyle} title={row.updatedBy}>
+  {userMap[row.updatedBy] || "未知使用者"}
+</td>
                                 <td style={tdStyle}>{row.value}</td>
                                 <td style={tdStyle}>{row.tentative ? "是" : "否"}</td>
                             </tr>
