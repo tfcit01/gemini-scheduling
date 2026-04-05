@@ -426,6 +426,7 @@
                 
                 const res = staffNames.map((baseName, idx) => ({
                     name: displayStaffNames ? displayStaffNames[idx] : baseName,
+                    startMonth: (idx === 1 && currentDate.getMonth() >= 3) ? 4 : 1, // 動態決定顯示的起始月份：晚班 4 月起重置
                     expectedDays: 0,
                     actualDays: 0,
                     leaveDays: 0,
@@ -453,7 +454,11 @@
                             shiftId = getDefaultShift(dateStr, staffIdx);
                         }
 
-                        if (shiftId) {
+                        // 新增：如果是晚班 (idx === 1) 且目前檢視月份為 4 月以後，則略過 4 月以前的出勤統計
+                        const isEveningShiftReset = staffIdx === 1 && currentDate.getMonth() >= 3;
+                        const skipOwnStats = isEveningShiftReset && d < new Date(2026, 3, 1);
+
+                        if (shiftId && !skipOwnStats) {
                             if (res[staffIdx]) {
                                 res[staffIdx].expectedDays += 1;
                                 if (leaveType === 'NONE') {
@@ -478,7 +483,13 @@
                                 subIndex = displayStaffNames.indexOf(item.subName);
                             }
                             if (subIndex !== -1 && res[subIndex]) {
-                                res[subIndex].subCount += 1;
+                                // 新增：如果代班人是晚班且目前檢視 4 月以後，則略過 4 月以前的代班貢獻累計
+                                const isSubberEveningReset = subIndex === 1 && currentDate.getMonth() >= 3;
+                                const skipSubberStats = isSubberEveningReset && d < new Date(2026, 3, 1);
+                                
+                                if (!skipSubberStats) {
+                                    res[subIndex].subCount += 1;
+                                }
                             }
                         }
                     });
@@ -503,7 +514,7 @@
                                         <h4 className="font-bold text-lg text-slate-800">{s.name}</h4>
                                         <span className="text-xs text-slate-400 font-light mt-0.5">(含預設排班)</span>
                                     </div>
-                                    <div className="text-xs font-mono text-slate-500 bg-slate-100 px-2 py-1 rounded">2026/1 ~ {currentDate.getMonth()+1}月</div>
+                                    <div className="text-xs font-mono text-slate-500 bg-slate-100 px-2 py-1 rounded">2026/{s.startMonth} ~ {currentDate.getMonth()+1}月</div>
                                 </div>
                                 
                                 <div className="grid grid-cols-2 gap-y-3 gap-x-2 text-sm">
