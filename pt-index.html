@@ -135,6 +135,24 @@
             return '';
         };
 
+        const getDisplayStaffName = (baseName, idx, date) => {
+            const year = date.getFullYear();
+            const month = date.getMonth(); // 0是1月，3是4月
+            const isBeforeApril = year < 2026 || (year === 2026 && month < 3);
+            
+            // 針對晚班 (idx === 1) 處理人員交接
+            if (idx === 1) {
+                if (isBeforeApril) {
+                    return "謝昕穎 (晚班)"; // 3月(含)以前強制顯示原名保留歷史紀錄
+                } else {
+                    if (baseName === "謝昕穎 (晚班)") {
+                        return "晚班"; // 4月起若尚未輸入新名字，則自動顯示為「晚班」
+                    }
+                }
+            }
+            return baseName;
+        };
+
         // --- Components ---
 
         // 1. Modal Component (新增 isSystemLocked 參數與遲到邏輯)
@@ -402,12 +420,12 @@
         };
 
         // 2. Stats Dashboard
-        const StatsDashboard = ({ data, staffNames, currentDate }) => {
+        const StatsDashboard = ({ data, staffNames, displayStaffNames, currentDate }) => {
             const stats = useMemo(() => {
                 if (!staffNames || !Array.isArray(staffNames) || staffNames.length === 0) return [];
                 
-                const res = staffNames.map(name => ({
-                    name,
+                const res = staffNames.map((baseName, idx) => ({
+                    name: displayStaffNames ? displayStaffNames[idx] : baseName,
                     expectedDays: 0,
                     actualDays: 0,
                     leaveDays: 0,
@@ -454,7 +472,11 @@
                         }
                         
                         if (item && item.subName) {
-                            const subIndex = staffNames.indexOf(item.subName);
+                            // 比對原始名稱或顯示名稱，確保跨月代班紀錄不會遺漏
+                            let subIndex = staffNames.indexOf(item.subName);
+                            if (subIndex === -1 && displayStaffNames) {
+                                subIndex = displayStaffNames.indexOf(item.subName);
+                            }
                             if (subIndex !== -1 && res[subIndex]) {
                                 res[subIndex].subCount += 1;
                             }
@@ -463,7 +485,7 @@
                 }
 
                 return res;
-            }, [data, staffNames, currentDate]);
+            }, [data, staffNames, displayStaffNames, currentDate]);
 
             if (!stats || stats.length === 0) return <div className="mb-6 p-4 bg-white rounded-xl shadow-sm border border-slate-200 text-center text-slate-500">載入統計資料中...</div>;
 
@@ -526,6 +548,11 @@
             const [scheduleData, setScheduleData] = useState({});
             const [staffNames, setStaffNames] = useState(DEFAULT_STAFF);
             const [isLoading, setIsLoading] = useState(true);
+
+            // 根據當前月份動態計算要顯示的員工姓名
+            const displayStaffNames = useMemo(() => {
+                return staffNames.map((name, idx) => getDisplayStaffName(name, idx, currentDate));
+            }, [staffNames, currentDate]);
 
             // Modal State
             const [modalOpen, setModalOpen] = useState(false);
@@ -807,7 +834,7 @@
                     </div>
 
                     {/* Stats */}
-                    <StatsDashboard data={scheduleData} staffNames={staffNames} currentDate={currentDate} />
+                    <StatsDashboard data={scheduleData} staffNames={staffNames} displayStaffNames={displayStaffNames} currentDate={currentDate} />
 
                     {/* Main Table */}
                     <div className={`bg-white rounded-xl shadow-lg border border-slate-200 overflow-hidden print:shadow-none print:border-none relative transition-all duration-500 ${isSystemLocked ? 'ring-4 ring-slate-100' : ''}`}>
@@ -839,11 +866,11 @@
                                             );
                                         })}
                                     </tr>
-                                </thead>
-                                <tbody>
-                                    {staffNames.map((staff, sIdx) => (
-                                        <tr key={sIdx} className="hover:bg-slate-50/50 transition group">
-                                            <td className="sticky left-0 z-10 bg-white group-hover:bg-slate-50 transition p-0 border-r border-b border-slate-200 shadow-[4px_0_8px_-4px_rgba(0,0,0,0.1)] relative">
+                            </thead>
+                            <tbody>
+                                {displayStaffNames.map((staff, sIdx) => (
+                                    <tr key={sIdx} className="hover:bg-slate-50/50 transition group">
+                                        <td className="sticky left-0 z-10 bg-white group-hover:bg-slate-50 transition p-0 border-r border-b border-slate-200 shadow-[4px_0_8px_-4px_rgba(0,0,0,0.1)] relative">
                                                 <div className="flex items-center h-14">
                                                     {!isSystemLocked && (
                                                         <div className="absolute left-1 text-slate-300 opacity-0 group-hover:opacity-100 transition">
@@ -971,7 +998,7 @@
                             onClose={() => setModalOpen(false)}
                             dateStr={editingCell.dateStr}
                             staffIndex={editingCell.staffIndex}
-                            staffNames={staffNames}
+                            staffNames={displayStaffNames}
                             currentData={scheduleData[`${editingCell.dateStr}_${editingCell.staffIndex}`]}
                             defaultShiftId={getDefaultShift(editingCell.dateStr, editingCell.staffIndex)}
                             onSave={handleSaveShift}
