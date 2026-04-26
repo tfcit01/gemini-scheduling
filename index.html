@@ -414,6 +414,10 @@
                 }
             };
 
+            const handlePrint = () => {
+                window.print();
+            };
+
             const handleUndo = async () => {
                 if (history.length === 0) return;
                 const lastAction = history[history.length - 1]; setHistory(history.slice(0, -1));
