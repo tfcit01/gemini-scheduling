@@ -610,7 +610,11 @@
         function App() {
             const [user, setUser] = useState(null);
             const [fb, setFb] = useState(null);
-            const [currentDate, setCurrentDate] = useState(new Date(2026, 0, 1));
+            // 修改這裡：預設載入時為現實時間的「當前月份」，且保持年份為 2026
+            const [currentDate, setCurrentDate] = useState(() => {
+                const today = new Date();
+                return new Date(2026, today.getMonth(), 1);
+            });
             const [scheduleData, setScheduleData] = useState({});
             const [staffNames, setStaffNames] = useState(DEFAULT_STAFF);
             const [isLoading, setIsLoading] = useState(true);
@@ -1057,7 +1061,6 @@
                         )}
                     </div>
 
-                    {/* Modal */}
                     {modalOpen && editingCell && (
                         <EditShiftModal 
                             isOpen={modalOpen}
