@@ -12,8 +12,8 @@
     <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
     
-    <!-- 載入 Babel -->
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <!-- 載入 Babel (鎖定在穩定的 7.23.2 版本，避免 7.24+ 版本的 JSX 解析衝突) -->
+    <script src="https://unpkg.com/@babel/standalone@7.23.2/babel.min.js"></script>
 
     <style>
         @media print {
@@ -31,6 +31,30 @@
 <body class="bg-slate-50 text-slate-800 font-sans">
     <div id="root"></div>
 
+    <!-- Firebase SDK -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, doc, onSnapshot, setDoc, deleteDoc, updateDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        window.firebaseModules = {
+            initializeApp,
+            getAuth,
+            signInAnonymously,
+            signInWithCustomToken,
+            onAuthStateChanged,
+            getFirestore,
+            collection,
+            doc,
+            onSnapshot,
+            setDoc,
+            deleteDoc,
+            updateDoc
+        };
+
+        window.dispatchEvent(new Event('firebase-ready'));
+    </script>
+
     <!-- 主程式 -->
     <script type="text/babel">
         const { useState, useEffect, useMemo, useCallback } = React;
@@ -45,6 +69,7 @@
             Printer: (props) => <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect width="12" height="8" x="6" y="14"/></svg>,
             X: (props) => <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 18 18"/></svg>,
             Edit: (props) => <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>,
+            // 新增鎖定與時鐘圖示
             Lock: (props) => <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>,
             Unlock: (props) => <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></svg>,
             Clock: (props) => <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
@@ -64,7 +89,7 @@
         const APP_ID = "pt-schedule-1ad44";
         const COLLECTION_NAME = "pt_roster_2026"; 
         const SETTINGS_DOC = "settings_2026_v2";
-        const SYSTEM_STATE_DOC = "system_status_2026"; 
+        const SYSTEM_STATE_DOC = "system_status_2026"; // 新增：用於儲存全域鎖定狀態
         const ADMIN_PWD = "8980";
 
         const DEFAULT_STAFF = ["王羿涵 (早班)", "謝昕穎 (晚班)", "陳怡杉 (假日班)"];
@@ -112,23 +137,38 @@
 
         const getDisplayStaffName = (baseName, idx, date) => {
             const year = date.getFullYear();
-            const month = date.getMonth(); 
+            const month = date.getMonth(); // 0是1月，3是4月
             const isBeforeApril = year < 2026 || (year === 2026 && month < 3);
             
+            // 針對晚班 (idx === 1) 處理人員交接
             if (idx === 1) {
                 if (isBeforeApril) {
-                    return "謝昕穎 (晚班)"; 
+                    return "謝昕穎 (晚班)"; // 3月(含)以前強制顯示原名保留歷史紀錄
                 } else {
                     if (baseName === "謝昕穎 (晚班)") {
-                        return "晚班"; 
+                        return "晚班"; // 4月起若尚未輸入新名字，則自動顯示為「晚班」
                     }
                 }
             }
+
+            // 針對假日班 (idx === 2) 處理人員交接
+            if (idx === 2) {
+                const isBeforeMay = year < 2026 || (year === 2026 && month < 4);
+                if (isBeforeMay) {
+                    return "陳怡杉 (假日班)"; // 4月(含)以前顯示陳怡杉
+                } else {
+                    if (baseName === "陳怡杉 (假日班)") {
+                        return "黃文欣 (假日班)"; // 5月起預設顯示黃文欣
+                    }
+                }
+            }
+
             return baseName;
         };
 
         // --- Components ---
 
+        // 1. Modal Component (新增 isSystemLocked 參數與遲到邏輯)
         const EditShiftModal = ({ isOpen, onClose, dateStr, staffIndex, currentData, staffNames, onSave, defaultShiftId, isSystemLocked }) => {
             if (!isOpen) return null;
 
@@ -137,11 +177,12 @@
             const [subName, setSubName] = useState(currentData?.subName || '');
             const [isFullTimeSub, setIsFullTimeSub] = useState(currentData?.isFullTimeSub || false);
             
+            // 遲到相關狀態
             const [isLate, setIsLate] = useState(currentData?.isLate || false);
-            const [lateNote, setLateNote] = useState(currentData?.lateNote || ''); 
+            const [lateNote, setLateNote] = useState(currentData?.lateNote || ''); // 遲到備註
             const [showPwdPrompt, setShowPwdPrompt] = useState(false);
             const [pwdInput, setPwdInput] = useState('');
-            const [noteInput, setNoteInput] = useState('');
+            const [noteInput, setNoteInput] = useState(''); // 驗證時的臨時備註輸入
 
             useEffect(() => {
                 if (isOpen) {
@@ -160,14 +201,14 @@
                     leaveType,
                     subName: leaveType !== 'NONE' ? subName : '',
                     isFullTimeSub: leaveType !== 'NONE' ? isFullTimeSub : false,
-                    isLate,
-                    lateNote 
+                    isLate, // 儲存遲到狀態
+                    lateNote // 儲存遲到備註
                 });
                 onClose();
             };
 
             const handleToggleLate = () => {
-                setNoteInput(''); 
+                setNoteInput(''); // 開啟驗證視窗時清空輸入
                 setShowPwdPrompt(true);
             };
 
@@ -176,6 +217,7 @@
                     const newLateState = !isLate;
                     setIsLate(newLateState);
                     
+                    // 如果是標記為遲到，則寫入備註；如果是取消遲到，則清空備註
                     if (newLateState) {
                         setLateNote(noteInput);
                     } else {
@@ -194,6 +236,8 @@
             const dateObj = new Date(dateStr);
             const dateLabel = `${dateObj.getMonth()+1}/${dateObj.getDate()} (週${['日','一','二','三','四','五','六'][dateObj.getDay()]})`;
             const isHol = isHoliday(dateStr);
+
+            // 如果系統鎖定，則禁用一般編輯區塊
             const editingDisabled = isSystemLocked;
 
             return (
@@ -209,6 +253,7 @@
                             </button>
                         </div>
 
+                        {/* 密碼驗證彈窗 (覆蓋在 Modal 上層) */}
                         {showPwdPrompt && (
                             <div className="absolute inset-0 bg-white/95 z-50 flex flex-col items-center justify-center rounded-xl p-6 space-y-4 animate-fade-in">
                                 <Icons.Lock size={32} className="text-slate-400" />
@@ -226,6 +271,7 @@
                                     autoFocus
                                 />
 
+                                {/* 只有在標記遲到(目前狀態為非遲到)時才顯示備註輸入框 */}
                                 {!isLate && (
                                     <div className="w-full px-8 mb-2">
                                         <label className="block text-xs text-slate-500 mb-1 text-left font-medium">遲到備註 (選填)</label>
@@ -253,6 +299,7 @@
                         )}
 
                         <div className="space-y-6 overflow-y-auto pr-1">
+                            {/* 遲到註記 (不受鎖定影響) */}
                             <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
                                 <div className="flex justify-between items-center">
                                     <div className="flex items-center gap-2">
@@ -273,6 +320,7 @@
                                 )}
                             </div>
 
+                            {/* 以下區塊受 editingDisabled 控制 */}
                             <div className={`space-y-6 transition-opacity duration-300 ${editingDisabled ? 'opacity-40 pointer-events-none grayscale' : ''}`}>
                                 <div>
                                     <label className="block text-sm font-semibold text-slate-700 mb-2">班別選擇</label>
@@ -384,20 +432,27 @@
             );
         };
 
+        // 2. Stats Dashboard
         const StatsDashboard = ({ data, staffNames, displayStaffNames, currentDate }) => {
             const stats = useMemo(() => {
                 if (!staffNames || !Array.isArray(staffNames) || staffNames.length === 0) return [];
                 
-                const res = staffNames.map((baseName, idx) => ({
-                    name: displayStaffNames ? displayStaffNames[idx] : baseName,
-                    startMonth: (idx === 1 && currentDate.getMonth() >= 3) ? 4 : 1, 
-                    expectedDays: 0,
-                    actualDays: 0,
-                    leaveDays: 0,
-                    emergencyCount: 0,
-                    subCount: 0,
-                    lateCount: 0 
-                }));
+                const res = staffNames.map((baseName, idx) => {
+                    let startLabel = "1";
+                    if (idx === 1 && currentDate.getMonth() >= 3) startLabel = "4";
+                    if (idx === 2 && currentDate.getMonth() >= 4) startLabel = "4/29"; // 5月起看黃文欣，顯示為 4/29 起
+
+                    return {
+                        name: displayStaffNames ? displayStaffNames[idx] : baseName,
+                        startLabel: startLabel,
+                        expectedDays: 0,
+                        actualDays: 0,
+                        leaveDays: 0,
+                        emergencyCount: 0,
+                        subCount: 0,
+                        lateCount: 0 // 新增遲到統計
+                    };
+                });
 
                 const start = new Date(2026, 0, 1); 
                 const end = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0); 
@@ -418,14 +473,32 @@
                             shiftId = getDefaultShift(dateStr, staffIdx);
                         }
 
+                        // 判斷是否略過統計
+                        let skipOwnStats = false;
+                        
+                        // 晚班邏輯
                         const isEveningShiftReset = staffIdx === 1 && currentDate.getMonth() >= 3;
-                        const skipOwnStats = isEveningShiftReset && d < new Date(2026, 3, 1);
+                        if (isEveningShiftReset && d < new Date(2026, 3, 1)) {
+                            skipOwnStats = true;
+                        }
+
+                        // 假日班邏輯 (陳怡杉 4/26 離職，黃文欣 4/29 到職)
+                        if (staffIdx === 2) {
+                            if (currentDate.getMonth() >= 4) {
+                                // 檢視 5 月以後，統計黃文欣 (從 4/29 開始計算)
+                                if (d < new Date(2026, 3, 29)) skipOwnStats = true;
+                            } else {
+                                // 檢視 4 月以前，統計陳怡杉 (只計算到 4/26)
+                                if (d >= new Date(2026, 3, 27)) skipOwnStats = true;
+                            }
+                        }
 
                         if (shiftId && !skipOwnStats) {
                             if (res[staffIdx]) {
                                 res[staffIdx].expectedDays += 1;
                                 if (leaveType === 'NONE') {
                                     res[staffIdx].actualDays += 1;
+                                    // 統計遲到 (只計算正常出勤日)
                                     if (item && item.isLate) {
                                         res[staffIdx].lateCount += 1;
                                     }
@@ -439,13 +512,35 @@
                         }
                         
                         if (item && item.subName) {
+                            // 比對原始名稱或顯示名稱，確保跨月代班紀錄不會遺漏
                             let subIndex = staffNames.indexOf(item.subName);
                             if (subIndex === -1 && displayStaffNames) {
                                 subIndex = displayStaffNames.indexOf(item.subName);
                             }
+
+                            // 容錯：直接比對名字來確保代班貢獻不會因為換月顯示不同名字而遺漏
+                            if (item.subName.includes("黃文欣") || item.subName.includes("陳怡杉")) {
+                                subIndex = 2;
+                            }
+
                             if (subIndex !== -1 && res[subIndex]) {
-                                const isSubberEveningReset = subIndex === 1 && currentDate.getMonth() >= 3;
-                                const skipSubberStats = isSubberEveningReset && d < new Date(2026, 3, 1);
+                                let skipSubberStats = false;
+                                
+                                // 晚班代班略過邏輯
+                                if (subIndex === 1 && currentDate.getMonth() >= 3) {
+                                    if (d < new Date(2026, 3, 1)) skipSubberStats = true;
+                                }
+                                
+                                // 假日班代班略過邏輯
+                                if (subIndex === 2) {
+                                    if (currentDate.getMonth() >= 4) {
+                                        // 5月起看黃文欣，代班貢獻從 4/29 算起
+                                        if (d < new Date(2026, 3, 29)) skipSubberStats = true;
+                                    } else {
+                                        // 4月前看陳怡杉，代班貢獻計算至 4/26
+                                        if (d >= new Date(2026, 3, 27)) skipSubberStats = true;
+                                    }
+                                }
                                 
                                 if (!skipSubberStats) {
                                     res[subIndex].subCount += 1;
@@ -474,7 +569,7 @@
                                         <h4 className="font-bold text-lg text-slate-800">{s.name}</h4>
                                         <span className="text-xs text-slate-400 font-light mt-0.5">(含預設排班)</span>
                                     </div>
-                                    <div className="text-xs font-mono text-slate-500 bg-slate-100 px-2 py-1 rounded">2026/{s.startMonth} ~ {currentDate.getMonth()+1}月</div>
+                                    <div className="text-xs font-mono text-slate-500 bg-slate-100 px-2 py-1 rounded">2026/{s.startLabel} ~ {currentDate.getMonth()+1}月</div>
                                 </div>
                                 
                                 <div className="grid grid-cols-2 gap-y-3 gap-x-2 text-sm">
@@ -511,6 +606,7 @@
             );
         };
 
+        // 3. Main App Component
         function App() {
             const [user, setUser] = useState(null);
             const [fb, setFb] = useState(null);
@@ -519,33 +615,36 @@
             const [staffNames, setStaffNames] = useState(DEFAULT_STAFF);
             const [isLoading, setIsLoading] = useState(true);
 
+            // 根據當前月份動態計算要顯示的員工姓名
             const displayStaffNames = useMemo(() => {
                 return staffNames.map((name, idx) => getDisplayStaffName(name, idx, currentDate));
             }, [staffNames, currentDate]);
 
+            // Modal State
             const [modalOpen, setModalOpen] = useState(false);
             const [editingCell, setEditingCell] = useState(null); 
 
-            const [isSystemLocked, setIsSystemLocked] = useState(true); 
+            // System Lock State
+            const [isSystemLocked, setIsSystemLocked] = useState(true); // 預設為鎖定
             const [lastUpdateTime, setLastUpdateTime] = useState('-');
             const [showUnlockPrompt, setShowUnlockPrompt] = useState(false);
             const [unlockInput, setUnlockInput] = useState('');
 
-            // 初始化與動態載入 Firebase (修復 Babel 錯誤的關鍵)
+            // Init Firebase
             useEffect(() => {
                 const init = async () => {
                     try {
-                        // 使用 await import() 動態載入 Firebase，完全避免 Babel 編譯期的 import 問題
-                        const { initializeApp } = await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js");
-                        const { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } = await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js");
-                        const { getFirestore, collection, doc, onSnapshot, setDoc, deleteDoc, updateDoc } = await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js");
-                        
-                        window.firebaseModules = {
-                            initializeApp, getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken,
-                            getFirestore, collection, doc, onSnapshot, setDoc, deleteDoc, updateDoc
-                        };
+                        let attempts = 0;
+                        while(!window.firebaseModules && attempts < 20) {
+                            await new Promise(r => setTimeout(r, 100));
+                            attempts++;
+                        }
+                        if(!window.firebaseModules) throw new Error("Firebase SDK Timeout");
 
-                        const app = initializeApp(FIREBASE_CONFIG);
+                        const { initializeApp, getAuth, signInAnonymously, onAuthStateChanged, getFirestore, signInWithCustomToken } = window.firebaseModules;
+                        
+                        const config = FIREBASE_CONFIG;
+                        const app = initializeApp(config);
                         const auth = getAuth(app);
                         const db = getFirestore(app);
                         
@@ -575,11 +674,13 @@
                 init();
             }, []);
 
+            // Data Listeners
             useEffect(() => {
-                if(!user || !fb || !window.firebaseModules) return;
+                if(!user || !fb) return;
                 const { collection, onSnapshot, doc } = window.firebaseModules;
                 const currentAppId = typeof __app_id !== 'undefined' ? __app_id : APP_ID;
 
+                // 1. Roster Data
                 const rosterPath = ['artifacts', currentAppId, 'public', 'data', COLLECTION_NAME];
                 const unsubRoster = onSnapshot(collection(fb.db, ...rosterPath), (snap) => {
                     const d = {};
@@ -587,6 +688,7 @@
                     setScheduleData(d);
                 });
 
+                // 2. Settings Data
                 const settingsPath = ['artifacts', currentAppId, 'public', 'data', SETTINGS_DOC, 'staff_list'];
                 const unsubSettings = onSnapshot(doc(fb.db, ...settingsPath), (snap) => {
                     if(snap.exists()) {
@@ -595,6 +697,8 @@
                     }
                 });
 
+                // 3. System Lock State (Sync)
+                // 修正：加入 'main' 作為文件 ID，使路徑符合 Firestore 規定 (Collection/Doc/Collection/Doc...)
                 const lockRef = doc(fb.db, 'artifacts', currentAppId, 'public', 'data', SYSTEM_STATE_DOC, 'main');
                 const unsubLock = onSnapshot(lockRef, (snap) => {
                     if(snap.exists()) {
@@ -602,6 +706,7 @@
                         setIsSystemLocked(data.locked);
                         if(data.lastUpdateTime) setLastUpdateTime(data.lastUpdateTime);
                     } else {
+                        // Default to locked if no doc
                         setIsSystemLocked(true);
                     }
                 });
@@ -635,6 +740,7 @@
                 };
 
                 const defaultVal = getDefaultShift(editingCell.dateStr, editingCell.staffIndex);
+                // 如果是預設值，且沒有任何特殊狀態(請假/代班/遲到)，則刪除文檔
                 const isRedundantSave = data.shiftId === defaultVal && data.leaveType === 'NONE' && !data.subName && !data.isLate;
 
                 if (isRedundantSave) {
@@ -644,14 +750,17 @@
                 }
             };
 
+            // Lock/Unlock Logic
             const handleToggleLock = async () => {
                 if (isSystemLocked) {
                     setShowUnlockPrompt(true);
                 } else {
+                    // Lock immediately
                     if(fb) {
                         const { doc, setDoc } = window.firebaseModules;
                         const currentAppId = typeof __app_id !== 'undefined' ? __app_id : APP_ID;
                         const nowStr = new Date().toLocaleString('zh-TW', { hour12: false });
+                        // 修正：加入 'main' 文件 ID
                         await setDoc(doc(fb.db, 'artifacts', currentAppId, 'public', 'data', SYSTEM_STATE_DOC, 'main'), { 
                             locked: true,
                             lastUpdateTime: nowStr
@@ -665,6 +774,7 @@
                     if(fb) {
                         const { doc, setDoc } = window.firebaseModules;
                         const currentAppId = typeof __app_id !== 'undefined' ? __app_id : APP_ID;
+                        // 修正：加入 'main' 文件 ID
                         await setDoc(doc(fb.db, 'artifacts', currentAppId, 'public', 'data', SYSTEM_STATE_DOC, 'main'), { locked: false }, { merge: true });
                     }
                     setShowUnlockPrompt(false);
@@ -682,7 +792,7 @@
             };
 
             const handleStaffNameEdit = async (idx, newName) => {
-                if(isSystemLocked) return; 
+                if(isSystemLocked) return; // Locked: prevent edit
                 const newNames = [...staffNames];
                 newNames[idx] = newName;
                 setStaffNames(newNames); 
@@ -794,6 +904,7 @@
 
                     {/* Main Table */}
                     <div className={`bg-white rounded-xl shadow-lg border border-slate-200 overflow-hidden print:shadow-none print:border-none relative transition-all duration-500 ${isSystemLocked ? 'ring-4 ring-slate-100' : ''}`}>
+                        {/* Lock Overlay for Visual Feedback */}
                         {isSystemLocked && (
                             <div className="absolute top-0 left-0 w-full h-1 bg-red-500 z-50"></div>
                         )}
@@ -821,11 +932,11 @@
                                             );
                                         })}
                                     </tr>
-                            </thead>
-                            <tbody>
-                                {displayStaffNames.map((staff, sIdx) => (
-                                    <tr key={sIdx} className="hover:bg-slate-50/50 transition group">
-                                        <td className="sticky left-0 z-10 bg-white group-hover:bg-slate-50 transition p-0 border-r border-b border-slate-200 shadow-[4px_0_8px_-4px_rgba(0,0,0,0.1)] relative">
+                                </thead>
+                                <tbody>
+                                    {displayStaffNames.map((staff, sIdx) => (
+                                        <tr key={sIdx} className="hover:bg-slate-50/50 transition group">
+                                            <td className="sticky left-0 z-10 bg-white group-hover:bg-slate-50 transition p-0 border-r border-b border-slate-200 shadow-[4px_0_8px_-4px_rgba(0,0,0,0.1)] relative">
                                                 <div className="flex items-center h-14">
                                                     {!isSystemLocked && (
                                                         <div className="absolute left-1 text-slate-300 opacity-0 group-hover:opacity-100 transition">
@@ -861,7 +972,7 @@
                                                 const isEmergency = cellData.leaveType === 'EMERGENCY';
                                                 const isLate = cellData.isLate === true;
                                                 const isHol = isHoliday(dateStr);
-                                                const lateNote = cellData.lateNote; 
+                                                const lateNote = cellData.lateNote; // 取得資料中的遲到備註
 
                                                 return (
                                                     <td 
@@ -890,6 +1001,7 @@
                                                             </div>
                                                         )}
 
+                                                        {/* Leave Overlay */}
                                                         {isLeave && (
                                                             <div className="absolute inset-0 z-10 flex items-center justify-center">
                                                                 <div className={`
@@ -903,6 +1015,7 @@
                                                             </div>
                                                         )}
 
+                                                        {/* Late Indicator */}
                                                         {isLate && (
                                                             <div className="absolute top-0 right-0 z-30">
                                                                 <div className={`bg-red-500 text-white rounded-bl-lg rounded-tr-sm ${lateNote ? 'w-auto px-1' : 'w-4'} h-4 flex items-center justify-center shadow-sm`}>
@@ -911,6 +1024,7 @@
                                                             </div>
                                                         )}
 
+                                                        {/* Sub Indicator */}
                                                         {cellData.subName && (
                                                             <div className="absolute -bottom-2 left-1/2 transform -translate-x-1/2 z-20 bg-slate-800 text-white text-[9px] px-1.5 py-0.5 rounded-full shadow border border-white whitespace-nowrap">
                                                                 代: {cellData.subName}
@@ -943,6 +1057,7 @@
                         )}
                     </div>
 
+                    {/* Modal */}
                     {modalOpen && editingCell && (
                         <EditShiftModal 
                             isOpen={modalOpen}
