@@ -129,37 +129,54 @@
 
         const getDefaultShift = (dateStr, staffIndex) => {
             const isHol = isHoliday(dateStr);
+            const [y, m, day] = dateStr.split('-').map(Number);
+            const time = new Date(y, m - 1, day).getTime();
+
             if (staffIndex === 0) return isHol ? '' : 'M';
-            else if (staffIndex === 1) return isHol ? '' : 'E';
-            else if (staffIndex === 2) return isHol ? 'H' : '';
+            
+            if (staffIndex === 1) {
+                // 晚班：謝昕穎至3月底；李子鳳僅於 7/20 - 8/14
+                const isXiePeriod = time < new Date(2026, 3, 1).getTime();
+                const isLiPeriod = time >= new Date(2026, 6, 20).getTime() && time <= new Date(2026, 7, 14).getTime();
+                
+                if (isXiePeriod || isLiPeriod) {
+                    return isHol ? '' : 'E';
+                }
+                return ''; // 其他時間晚班預設無排班
+            }
+            
+            if (staffIndex === 2) {
+                // 假日班：陳怡杉 -> 黃文欣 -> 8月起由 蔡沁和 接手
+                return isHol ? 'H' : '';
+            }
             return '';
         };
 
         const getDisplayStaffName = (baseName, idx, date) => {
             const year = date.getFullYear();
             const month = date.getMonth(); // 0是1月，3是4月
-            const isBeforeApril = year < 2026 || (year === 2026 && month < 3);
             
             // 針對晚班 (idx === 1) 處理人員交接
             if (idx === 1) {
-                if (isBeforeApril) {
-                    return "謝昕穎 (晚班)"; // 3月(含)以前強制顯示原名保留歷史紀錄
+                if (year < 2026 || (year === 2026 && month < 3)) {
+                    return "謝昕穎 (晚班)"; 
+                } else if (year === 2026 && month === 6) { // 7月
+                    return baseName === "謝昕穎 (晚班)" || baseName === "晚班" ? "晚班 / 李子鳳(7/20起)" : baseName;
+                } else if (year === 2026 && month === 7) { // 8月
+                    return baseName === "謝昕穎 (晚班)" || baseName === "晚班" ? "李子鳳(至8/14)" : baseName;
                 } else {
-                    if (baseName === "謝昕穎 (晚班)") {
-                        return "晚班"; // 4月起若尚未輸入新名字，則自動顯示為「晚班」
-                    }
+                    return baseName === "謝昕穎 (晚班)" ? "晚班" : baseName;
                 }
             }
 
             // 針對假日班 (idx === 2) 處理人員交接
             if (idx === 2) {
-                const isBeforeMay = year < 2026 || (year === 2026 && month < 4);
-                if (isBeforeMay) {
-                    return "陳怡杉 (假日班)"; // 4月(含)以前顯示陳怡杉
-                } else {
-                    if (baseName === "陳怡杉 (假日班)") {
-                        return "黃文欣 (假日班)"; // 5月起預設顯示黃文欣
-                    }
+                if (year < 2026 || (year === 2026 && month < 4)) {
+                    return "陳怡杉 (假日班)"; 
+                } else if (year === 2026 && month >= 4 && month <= 6) {
+                    return baseName === "陳怡杉 (假日班)" ? "黃文欣 (假日班)" : baseName;
+                } else if (year === 2026 && month >= 7) { // 8月起
+                    return baseName === "陳怡杉 (假日班)" || baseName === "黃文欣 (假日班)" || baseName === "假日班" ? "蔡沁和 (假日班)" : baseName;
                 }
             }
 
@@ -438,12 +455,36 @@
                 if (!staffNames || !Array.isArray(staffNames) || staffNames.length === 0) return [];
                 
                 const res = staffNames.map((baseName, idx) => {
+                    let name = displayStaffNames ? displayStaffNames[idx] : baseName;
                     let startLabel = "1";
-                    if (idx === 1 && currentDate.getMonth() >= 3) startLabel = "4";
-                    if (idx === 2 && currentDate.getMonth() >= 4) startLabel = "4/29"; // 5月起看黃文欣，顯示為 4/29 起
+                    
+                    if (idx === 1) {
+                        if (currentDate.getMonth() >= 8) { // 9月後
+                            startLabel = "9";
+                            name = "晚班";
+                        } else if (currentDate.getMonth() >= 6) { // 7, 8月
+                            startLabel = "7/20";
+                            name = "李子鳳 (晚班)";
+                        } else if (currentDate.getMonth() >= 3) { // 4-6月
+                            startLabel = "4";
+                            name = "晚班";
+                        }
+                    }
+
+                    if (idx === 2) {
+                        if (currentDate.getMonth() >= 7) { // 8月起
+                            startLabel = "8";
+                            name = "蔡沁和 (假日班)";
+                        } else if (currentDate.getMonth() >= 4) { // 5-7月
+                            startLabel = "4/29"; 
+                            name = "黃文欣 (假日班)";
+                        } else if (currentDate.getMonth() === 3) { // 4月
+                            startLabel = "1";
+                        }
+                    }
 
                     return {
-                        name: displayStaffNames ? displayStaffNames[idx] : baseName,
+                        name: name,
                         startLabel: startLabel,
                         expectedDays: 0,
                         actualDays: 0,
@@ -477,18 +518,23 @@
                         let skipOwnStats = false;
                         
                         // 晚班邏輯
-                        const isEveningShiftReset = staffIdx === 1 && currentDate.getMonth() >= 3;
-                        if (isEveningShiftReset && d < new Date(2026, 3, 1)) {
-                            skipOwnStats = true;
+                        if (staffIdx === 1) {
+                            if (currentDate.getMonth() >= 8) {
+                                if (d < new Date(2026, 8, 1)) skipOwnStats = true;
+                            } else if (currentDate.getMonth() >= 6) {
+                                if (d < new Date(2026, 6, 20) || d > new Date(2026, 7, 14)) skipOwnStats = true;
+                            } else if (currentDate.getMonth() >= 3) {
+                                if (d < new Date(2026, 3, 1)) skipOwnStats = true;
+                            }
                         }
 
-                        // 假日班邏輯 (陳怡杉 4/26 離職，黃文欣 4/29 到職)
+                        // 假日班邏輯
                         if (staffIdx === 2) {
-                            if (currentDate.getMonth() >= 4) {
-                                // 檢視 5 月以後，統計黃文欣 (從 4/29 開始計算)
+                            if (currentDate.getMonth() >= 7) {
+                                if (d < new Date(2026, 7, 1)) skipOwnStats = true;
+                            } else if (currentDate.getMonth() >= 4) {
                                 if (d < new Date(2026, 3, 29)) skipOwnStats = true;
                             } else {
-                                // 檢視 4 月以前，統計陳怡杉 (只計算到 4/26)
                                 if (d >= new Date(2026, 3, 27)) skipOwnStats = true;
                             }
                         }
@@ -519,25 +565,33 @@
                             }
 
                             // 容錯：直接比對名字來確保代班貢獻不會因為換月顯示不同名字而遺漏
-                            if (item.subName.includes("黃文欣") || item.subName.includes("陳怡杉")) {
+                            if (item.subName.includes("黃文欣") || item.subName.includes("陳怡杉") || item.subName.includes("蔡沁和")) {
                                 subIndex = 2;
+                            } else if (item.subName.includes("李子鳳") || item.subName.includes("謝昕穎")) {
+                                subIndex = 1;
                             }
 
                             if (subIndex !== -1 && res[subIndex]) {
                                 let skipSubberStats = false;
                                 
                                 // 晚班代班略過邏輯
-                                if (subIndex === 1 && currentDate.getMonth() >= 3) {
-                                    if (d < new Date(2026, 3, 1)) skipSubberStats = true;
+                                if (subIndex === 1) {
+                                    if (currentDate.getMonth() >= 8) {
+                                        if (d < new Date(2026, 8, 1)) skipSubberStats = true;
+                                    } else if (currentDate.getMonth() >= 6) {
+                                        if (d < new Date(2026, 6, 20) || d > new Date(2026, 7, 14)) skipSubberStats = true;
+                                    } else if (currentDate.getMonth() >= 3) {
+                                        if (d < new Date(2026, 3, 1)) skipSubberStats = true;
+                                    }
                                 }
                                 
                                 // 假日班代班略過邏輯
                                 if (subIndex === 2) {
-                                    if (currentDate.getMonth() >= 4) {
-                                        // 5月起看黃文欣，代班貢獻從 4/29 算起
+                                    if (currentDate.getMonth() >= 7) {
+                                        if (d < new Date(2026, 7, 1)) skipSubberStats = true;
+                                    } else if (currentDate.getMonth() >= 4) {
                                         if (d < new Date(2026, 3, 29)) skipSubberStats = true;
                                     } else {
-                                        // 4月前看陳怡杉，代班貢獻計算至 4/26
                                         if (d >= new Date(2026, 3, 27)) skipSubberStats = true;
                                     }
                                 }
