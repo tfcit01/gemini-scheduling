@@ -712,7 +712,8 @@
                                 <div key={idx} className="bg-white p-3 rounded shadow-sm border-t-4 border-blue-500 text-sm">
                                     <div className="font-bold text-gray-700 text-lg mb-1">{staff || `同仁 ${String.fromCharCode(65+idx)}`}</div>
                                     <div className="grid grid-cols-2 gap-2">
-                                        <div className="bg-red-50 p-2 rounded flex flex-col justify-between">
+
+					<div className="bg-red-50 p-2 rounded flex flex-col justify-between">
                                             <div>
                                                 <span className="block text-xs text-gray-500">國定假 (H)</span>
                                                 <div className={`font-mono font-bold ${hStats.remaining >= 0 ? 'text-green-600' : 'text-red-600'}`}>
@@ -720,20 +721,26 @@
                                                 </div>
                                             </div>
                                             
-                                            {/* 已休過的國定假清單（保持原背景色） */}
-                                            <div className="mt-2 text-[11px] text-gray-600 max-h-24 overflow-y-auto border-t border-red-200/60 pt-1.5">
+                                            {/* 已休過的國定假清單（純日期列表） */}
+                                            <div className="mt-2 text-[11px] text-gray-600 border-t border-red-200/60 pt-1.5">
                                                 <div className="font-semibold text-gray-500 text-[10px] mb-0.5">已休國定假：</div>
                                                 {takenHolidays.length > 0 ? (
-                                                    takenHolidays.map((h, i) => (
-                                                        <div key={i} className="font-mono text-gray-700">
-                                                            {h.date.slice(5)} ({h.name})
-                                                        </div>
-                                                    ))
+                                                    <div className="font-mono text-gray-700 leading-tight">
+                                                        {takenHolidays.map((h, i) => (
+                                                            <span key={i}>
+                                                                {h.date.slice(5).replace('-', '/')}
+                                                                {i < takenHolidays.length - 1 ? '、' : ''}
+                                                                {(i + 1) % 4 === 0 && <br />}
+                                                            </span>
+                                                        ))}
+                                                    </div>
                                                 ) : (
                                                     <div className="text-gray-400 text-[10px]">無</div>
                                                 )}
                                             </div>
                                         </div>
+
+
                                         <div className="bg-gray-50 p-2 rounded">
                                             <span className="block text-xs text-gray-500">週期 R/O (需各4)</span>
                                             {intersectingCycles.length > 0 ? (
