@@ -722,6 +722,7 @@
                                             </div>
                                             
                                             {/* 已休過的國定假清單（純日期列表） */}
+   						{/* 已休過的國定假清單（每 5 個一列） */}
                                             <div className="mt-2 text-[11px] text-gray-600 border-t border-red-200/60 pt-1.5">
                                                 <div className="font-semibold text-gray-500 text-[10px] mb-0.5">已休國定假：</div>
                                                 {takenHolidays.length > 0 ? (
@@ -730,7 +731,7 @@
                                                             <span key={i}>
                                                                 {h.date.slice(5).replace('-', '/')}
                                                                 {i < takenHolidays.length - 1 ? '、' : ''}
-                                                                {(i + 1) % 4 === 0 && <br />}
+                                                                {(i + 1) % 5 === 0 && i < takenHolidays.length - 1 && <br />}
                                                             </span>
                                                         ))}
                                                     </div>
