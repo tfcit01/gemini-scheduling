@@ -619,7 +619,6 @@
                 return { available, used, remaining: available - used };
             };
 
-            // 取得當年度已休過的國定假清單[cite: 5]
             const getTakenHolidays = (staffIndex) => {
                 const currentMonthEnd = daysInView[daysInView.length - 1];
                 const datesToCheck = getDatesFromYearStart(currentMonthEnd);
@@ -720,12 +719,13 @@
                                                     餘 {hStats.remaining} <span className="text-[10px] text-gray-400">/ {hStats.available} (累計)</span>
                                                 </div>
                                             </div>
-                                            {/* 黃色區域：列出已休過的國定假日期 */}
-                                            <div className="mt-2 bg-yellow-100 p-1.5 rounded text-[11px] text-gray-700 max-h-24 overflow-y-auto border border-yellow-200">
-                                                <div className="font-bold text-yellow-800 text-[10px] mb-0.5">已休國定假：</div>
+                                            
+                                            {/* 已休過的國定假清單（保持原背景色） */}
+                                            <div className="mt-2 text-[11px] text-gray-600 max-h-24 overflow-y-auto border-t border-red-200/60 pt-1.5">
+                                                <div className="font-semibold text-gray-500 text-[10px] mb-0.5">已休國定假：</div>
                                                 {takenHolidays.length > 0 ? (
                                                     takenHolidays.map((h, i) => (
-                                                        <div key={i} className="font-mono text-gray-800">
+                                                        <div key={i} className="font-mono text-gray-700">
                                                             {h.date.slice(5)} ({h.name})
                                                         </div>
                                                     ))
@@ -880,8 +880,7 @@
                     </div>
                 </div>
             );
-        }
-    
+        }    
 
         const root = ReactDOM.createRoot(document.getElementById('root'));
         root.render(<ErrorBoundary><ScheduleApp /></ErrorBoundary>);
